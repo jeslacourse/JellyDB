@@ -1,1 +1,6 @@
-# 165a-winter-2020
+# JellyDB
+
+## Usage
+```
+python -m JellyDB
+```
