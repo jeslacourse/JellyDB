@@ -1,4 +1,4 @@
-from template.page import *
+from JellyDB.page import *
 from time import time
 
 INDIRECTION_COLUMN = 0
@@ -30,4 +30,3 @@ class Table:
 
     def __merge(self):
         pass
- 

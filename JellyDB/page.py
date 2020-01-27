@@ -1,4 +1,4 @@
-from template.config import *
+from JellyDB.config import *
 
 
 class Page:
@@ -13,4 +13,3 @@ class Page:
     def write(self, value):
         self.num_records += 1
         pass
-

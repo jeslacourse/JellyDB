@@ -1,10 +1,10 @@
-from template.table import Table, Record
-from template.index import Index
+from JellyDB.table import Table, Record
+from JellyDB.index import Index
 
 
 class Query:
     """
-    # Creates a Query object that can perform different queries on the specified table 
+    # Creates a Query object that can perform different queries on the specified table
     """
 
     def __init__(self, table):
@@ -42,8 +42,8 @@ class Query:
         pass
 
     """
-    :param start_range: int         # Start of the key range to aggregate 
-    :param end_range: int           # End of the key range to aggregate 
+    :param start_range: int         # Start of the key range to aggregate
+    :param end_range: int           # End of the key range to aggregate
     :param aggregate_columns: int  # Index of desired column to aggregate
     """
 
