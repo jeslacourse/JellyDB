@@ -1,4 +1,3 @@
-# This is a singleton class, meaning only one copy is ever created of it.
 # references used: https://python-3-patterns-idioms-test.readthedocs.io/en/latest/Singleton.html https://www.tutorialspoint.com/python_design_patterns/python_design_patterns_singleton.htm
 class Config:
     class __Config:
