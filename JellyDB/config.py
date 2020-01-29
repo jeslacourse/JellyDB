@@ -1,3 +1,4 @@
+# This is a singleton class, meaning only one copy is ever created of it.
 # references used: https://python-3-patterns-idioms-test.readthedocs.io/en/latest/Singleton.html https://www.tutorialspoint.com/python_design_patterns/python_design_patterns_singleton.htm
 class Config:
     class __Config:
@@ -12,6 +13,7 @@ class Config:
         START_RID = 1
         # Store the biggest bit of any data first
         INT_BYTE_ORDER = 'big'
+        NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE = 16
 
     instance = None
 
