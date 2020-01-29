@@ -7,8 +7,9 @@ from time import process_time
 from random import choice, randrange
 
 # Student Id and 4 grades
+# Grades table has 5 columns, key is first column
 db = Database()
-grades_table = db.create_table('Grades', 0, 5)
+grades_table = db.create_table('Grades', 5, 0)
 
 assert grades_table.name == "Grades"
 assert grades_table.num_columns == 0
