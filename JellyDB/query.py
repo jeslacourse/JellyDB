@@ -1,6 +1,4 @@
 from JellyDB.table import Table
-from JellyDB.index import Index
-
 
 # The Table class performs all query behavior; this is just an envelope. This
 # class exists because the Professor's test script expects a class named

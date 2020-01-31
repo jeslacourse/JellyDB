@@ -1,9 +1,10 @@
 from JellyDB.rid_allocator import RIDAllocator
-from JellyDB.page import *
+from JellyDB.indices import Indices
 from time import time
 
 INDIRECTION_COLUMN = 0
 TIMESTAMP_COLUMN = 1
+METADATA_COLUMN_COUNT = 2
 
 # Why not have a "PageRange" class? Because a "PageRange" is just data with no
 # functionality. We can use a list to represent it, and just use functions in
@@ -21,12 +22,23 @@ class Table:
         self._num_columns = num_columns
         self._RID_allocator = RID_allocator
         self.record_count = 0
+        self._indices = Indices()
         self._page_directory = {} # only one copy of each key can be present in a page directory! i.e. records can't have the same key!
         self._page_ranges = [] # list of lists of pages.
         self._add_page_range()
 
         self._recreate_page_directory()
+        self._indices.create_index(self.internal_id(key)) # we always want an index on the key
         pass
+    
+    """
+    # The users of our database only know about their data columns. Since we
+    # have metadata columns at the beginning of our tables, we must shift any
+    # column number they give us to make sure we access the correct column of
+    # data.
+    """
+    def internal_id(self, column: int) -> int:
+        return METADATA_COLUMN_COUNT + column
 
     """
     # delete the record in self.table which has the value `key` in the column used for its primary key
