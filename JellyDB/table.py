@@ -20,6 +20,7 @@ class Table:
         self._key = key
         self._num_columns = num_columns
         self._RID_allocator = RID_allocator
+        self.record_count = 0
         self._page_directory = {} # only one copy of each key can be present in a page directory! i.e. records can't have the same key!
         self._page_ranges = [] # list of lists of pages.
         self._add_page_range()
