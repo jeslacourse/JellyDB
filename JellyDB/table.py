@@ -1,5 +1,5 @@
+from JellyDB.rid_allocator import RIDAllocator
 from JellyDB.page import *
-from JellyDB.db import Database
 from time import time
 
 INDIRECTION_COLUMN = 0
@@ -17,11 +17,11 @@ class Table:
     :param num_columns: int     #Number of Columns: all columns are integer
     :param key: int             #Index of table key in columns
     """
-    def __init__(self, name: str, num_columns, key: int, db: Database):
+    def __init__(self, name: str, num_columns, key: int, RID_allocator: RIDAllocator):
         self.name = name
         self.key = key
         self.num_columns = num_columns
-        self._db = db
+        self._RID_allocator = RID_allocator
         self.page_directory = {} # only one copy of each key can be present in a page directory! i.e. records can't have the same key!
         self.page_ranges = [] # list of lists of pages.
         self.add_page_range()

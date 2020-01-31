@@ -1,9 +1,11 @@
+from JellyDB.rid_allocator import RIDAllocator
 from JellyDB.table import Table
 
 class Database():
 
     def __init__(self):
         self.tables = []
+        self.RID_allocator = RIDAllocator()
         pass
 
     def open(self):
@@ -19,25 +21,11 @@ class Database():
     :param key: int             #Index of table key in columns
     """
     def create_table(self, name, num_columns, key):
-        table = Table(name, num_columns, key)
+        table = Table(name, num_columns, key, self.RID_allocator)
         return table
 
     """
     # Deletes the specified table
     """
     def drop_table(self, name):
-        pass
-    
-    """
-    # Allocates enough base RIDs to fill up X pages
-    :returns:   # tuple, (lowest RID allocated, highest RID allocated)
-    """
-    def allocate_base_RIDs(self, num_pages_that_range_should_span: int):
-        pass
-    
-    """
-    # Allocates enough tail RIDs to fill up X pages
-    :returns:   # tuple, (lowest RID allocated, highest RID allocated)
-    """
-    def allocate_tail_RIDs(self, num_pages_that_range_should_span: int):
         pass
