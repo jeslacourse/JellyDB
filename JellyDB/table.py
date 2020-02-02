@@ -85,9 +85,9 @@ class Table:
         pass
 
     """
-    :param page_range: int  # index of page range to add the tail page to
+    :param page_range: int  # page range to add the tail page to
     """
-    def _add_tail_page(self, page_range: int):
+    def _add_tail_page(self, page_range: list):
         # TODO get tail RIDs, generate the storage, add it to self.page_ranges[page_range]
         self._recreate_page_directory()
     
