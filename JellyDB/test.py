@@ -5,9 +5,100 @@ from JellyDB.db import Database
 from JellyDB.query import Query
 from time import process_time
 from random import choice, randrange
+import traceback
+
+def correctness_testing():
+    print("\n====Correctness testing:====\n")
+    tests_passed = 0
+    tests_failed = 0
+
+    # Sonic Heroes characters
+    db = Database()
+    heroes_table = db.create_table('Heroes', 3, 0)
+
+    try:
+        assert heroes_table._name == "Heroes"
+        assert heroes_table._num_columns == 3
+        assert heroes_table._key == 0
+
+        print("Create table passed")
+        tests_passed += 1
+
+    except:
+        print("Create table FAILED")
+        tests_failed += 1
+
+    query = Query(heroes_table)
+    keys = []
+
+    query.insert("Sonic", "Sonic", "Speed")
+    query.insert("Tails", "Sonic", "Flight")
+    query.insert("Knuckles", "Sonic", "Power")
+
+    try:
+        for testkey in ["Sonic", "Tails", "Knuckles"]:
+            # print("Testing", testkey)
+            s = query.select(testkey, [])
+            assert len(s) == 1
+            for r in s:
+                assert r.columns[r.key_index] == testkey
+
+        print("\nTeam Sonic good")
+        tests_passed += 1
+
+    except Exception as exc:
+        print("\nTeam Sonic FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
+    query.insert("Shadow", "Dark", "Speed")
+    query.insert("Rouge", "Dark", "Flight")
+    query.insert("Omega", "Dark", "Power")
+
+    try:
+        for testkey in ["Shadow", "Rouge", "Omega"]:
+            # print("Testing", testkey)
+            s = query.select(testkey, [])
+            assert len(s) == 1
+            for r in s:
+                assert r.columns[r.key_index] == testkey
+
+        print("\nTeam Dark passed")
+        tests_passed += 1
+
+    except Exception as exc:
+        print("\nTeam Dark FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
+    query.update("Sonic", *["Sonic", "Sonic", "Napping"])
+
+    # Should get KeyError when trying to update non-existent record
+    try:
+        query.update("Eggman", *["Eggman", "Villain", "Jerkassery"])
+        assert False, "Expected KeyError for Eggman"
+    except KeyError:
+        print("\nEggman KeyError passed")
+        tests_passed += 1
+    except Exception as exc:
+        print("\nEggman KeyError FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
+
+    # print("\nTable dump:")
+    # for r in query.table.record_list:
+    #     print(r.columns)
+
+    if tests_failed == 0:
+        print("All tests passed!!! :)")
+    else:
+        print("\nTests passed:", tests_passed)
+        print("Tests failed:", tests_failed)
+
 
 def performance_testing():
-    print("\nPerformance testing:\n")
+    print("\n====Performance testing:====\n")
 
     # Student Id and 4 grades
     # Grades table has 5 columns, key is first column
@@ -71,4 +162,6 @@ def performance_testing():
     print("Deleting 10k records took:  \t\t\t", delete_time_1 - delete_time_0)
 
 if __name__ == "__main__":
+    correctness_testing()
     performance_testing()
+    print("\n\n")
