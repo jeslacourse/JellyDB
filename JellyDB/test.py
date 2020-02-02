@@ -11,9 +11,9 @@ from random import choice, randrange
 db = Database()
 grades_table = db.create_table('Grades', 5, 0)
 
-assert grades_table.name == "Grades"
-assert grades_table.num_columns == 0
-assert grades_table.key == 5
+assert grades_table._name == "Grades"
+assert grades_table._num_columns == 5
+assert grades_table._key == 0
 print("Create table good")
 raise SystemExit
 ##################################################
