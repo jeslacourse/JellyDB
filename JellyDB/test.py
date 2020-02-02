@@ -91,7 +91,7 @@ def correctness_testing():
     #     print(r.columns)
 
     if tests_failed == 0:
-        print("All tests passed!!! :)")
+        print("\nAll tests passed!!! :)")
     else:
         print("\nTests passed:", tests_passed)
         print("Tests failed:", tests_failed)
