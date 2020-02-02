@@ -21,11 +21,11 @@ def correctness_testing():
         assert heroes_table._num_columns == 3
         assert heroes_table._key == 0
 
-        print("Create table passed")
+        print("Heroes create table passed")
         tests_passed += 1
 
     except:
-        print("Create table FAILED")
+        print("Heroes create table FAILED")
         tests_failed += 1
 
     query = Query(heroes_table)
@@ -43,11 +43,11 @@ def correctness_testing():
             for r in s:
                 assert r.columns[r.key_index] == testkey
 
-        print("\nTeam Sonic good")
+        print("\nTeam Sonic select passed")
         tests_passed += 1
 
     except Exception as exc:
-        print("\nTeam Sonic FAILED")
+        print("\nTeam Sonic select FAILED")
         print(traceback.format_exc())
         tests_failed += 1
 
@@ -63,11 +63,11 @@ def correctness_testing():
             for r in s:
                 assert r.columns[r.key_index] == testkey
 
-        print("\nTeam Dark passed")
+        print("\nTeam Dark select passed")
         tests_passed += 1
 
     except Exception as exc:
-        print("\nTeam Dark FAILED")
+        print("\nTeam Dark select FAILED")
         print(traceback.format_exc())
         tests_failed += 1
 
@@ -78,10 +78,10 @@ def correctness_testing():
         query.update("Eggman", *["Eggman", "Villain", "Jerkassery"])
         assert False, "Expected KeyError for Eggman"
     except KeyError:
-        print("\nEggman KeyError passed")
+        print("\nEggman update KeyError passed")
         tests_passed += 1
     except Exception as exc:
-        print("\nEggman KeyError FAILED")
+        print("\nEggman update KeyError FAILED")
         print(traceback.format_exc())
         tests_failed += 1
 
