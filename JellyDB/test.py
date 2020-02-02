@@ -38,7 +38,7 @@ def correctness_testing():
     try:
         for testkey in ["Sonic", "Tails", "Knuckles"]:
             # print("Testing", testkey)
-            s = query.select(testkey, [])
+            s = query.select(testkey, [1, 1, 1])
             assert len(s) == 1
             for r in s:
                 assert r.columns[r.key_index] == testkey
