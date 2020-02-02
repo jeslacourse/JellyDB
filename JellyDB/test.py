@@ -71,11 +71,11 @@ def correctness_testing():
         print(traceback.format_exc())
         tests_failed += 1
 
-    query.update("Sonic", *["Sonic", "Sonic", "Napping"])
+    query.update(0, "Sonic", "Sonic", "Napping")
 
     # Should get KeyError when trying to update non-existent record
     try:
-        query.update("Eggman", *["Eggman", "Villain", "Jerkassery"])
+        query.update(0, "Eggman", "Villain", "Narcissism")
         assert False, "Expected KeyError for Eggman"
     except KeyError:
         print("\nEggman update KeyError passed")

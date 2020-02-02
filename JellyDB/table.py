@@ -90,8 +90,27 @@ class Table:
     # "takes as input a list of values for ALL columns of the table. The columns that are not being updated should be passed as None." - Parsoa
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
-    def update(self, key: int, columns: tuple):
-        pass
+    # Naive implementation: remove record and add updated record
+    # TODO: add support for None columns
+    def update(self, key_index: int, columns: tuple):
+        keyfound = False
+
+        # Check all records for matching key
+        for i in range (0, len(self.record_list)):
+            r = self.record_list[i]
+
+            # Remove record with matching key
+            if columns[key_index] == r.columns[r.key_index]:
+                self.record_list.pop(i)
+                keyfound = True
+                break
+
+        # Complain if no record with that key
+        if not keyfound:
+            raise KeyError(columns[key_index])
+
+        # Insert brand-new record with columns
+        self.insert(columns)
 
     """
     :param start_range: int         # Start of the key range to aggregate
