@@ -14,7 +14,7 @@ class Config:
     # Every database starts counting RIDs at 1.
     START_RID = 1
     # Every database update RIDs start one below the deletion mask
-    START_TAIL_RID = 2^RECORD_DELETION_MASK-1
+    START_TAIL_RID = RECORD_DELETION_MASK-1
     
     # Store the biggest bit of any data first
     INT_BYTE_ORDER = 'big'
