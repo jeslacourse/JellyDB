@@ -1,3 +1,6 @@
+"""
+Usage: python -m JellyDB.tester
+"""
 from JellyDB.db import Database
 from JellyDB.query import Query
 from JellyDB.config import init
