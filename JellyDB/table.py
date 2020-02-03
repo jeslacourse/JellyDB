@@ -1,17 +1,12 @@
 from JellyDB.rid_allocator import RIDAllocator
 from JellyDB.indices import Indices
+from JellyDB.logical_page import LogicalPage
+from JellyDB.page import Page
 from time import time
 
 INDIRECTION_COLUMN = 0
 TIMESTAMP_COLUMN = 1
 METADATA_COLUMN_COUNT = 2
-
-class Record:
-
-    def __init__(self, rid, key_index, columns):
-        self.rid = rid
-        self.key_index = key_index
-        self.columns = columns
 
 # Why not have a "PageRange" class? Because a "PageRange" is just data with no
 # functionality. We can use a list to represent it, and just use functions in
@@ -37,8 +32,11 @@ class Table:
         self._recreate_page_directory()
         self._indices.create_index(self.internal_id(key)) # we always want an index on the key
 
-        self.record_list = []
-        self.next_rid = 0
+        # List of logical pages that belong to this table
+        self.logical_page_list = []
+        # Initialize first logical page
+        # 0 and 60 are random values I made up
+        self.logical_page_list.append(LogicalPage(self._num_columns, 0, 60))
 
         pass
 
@@ -63,23 +61,25 @@ class Table:
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
     def insert(self, columns: tuple):
-        next_rid = self.next_rid
-        new_record = Record(next_rid, 0, columns)
-        self.record_list.append(new_record)
-        self.next_rid += 1
+        # Pass columns to write method of logical_page
+        # (I hardcoded this to write to first logical page -Lisa)
+        self.logical_page_list[0].write(columns)
+
 
     """
     # Read a record with specified key
     :param query_columns: list # Expect a list of integers: one per column. There will be a 1 if we are to read the column, a 0 otherwise.
     """
     def select(self, keyword, query_columns):
+        # Create empty list of records to return
         results = []
 
         # Loop through records (brute force)
-        for r in self.record_list:
+        for i in range (0, self.logical_page_list[0].record_count):
+            current_record = self.logical_page_list[0].read(i)
             # If key matches, append record to results
-            if keyword == r.columns[r.key_index]:
-                results.append(r)
+            if current_record[0] == keyword:
+                results.append(current_record)
 
         # Return list of results (currently all columns)
         # TODO: only return requested columns

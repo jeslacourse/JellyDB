@@ -35,13 +35,15 @@ def correctness_testing():
     query.insert("Tails", "Sonic", "Flight")
     query.insert("Knuckles", "Sonic", "Power")
 
+
     try:
+        # Try selecting "Sonic", "Tails", and "Knuckles".
+        # Make sure each returns only 1 record and that record is correct.
         for testkey in ["Sonic", "Tails", "Knuckles"]:
-            # print("Testing", testkey)
             s = query.select(testkey, [1, 1, 1])
             assert len(s) == 1
             for r in s:
-                assert r.columns[r.key_index] == testkey
+                assert r[0] == testkey
 
         print("\nTeam Sonic select passed")
         tests_passed += 1
@@ -50,6 +52,8 @@ def correctness_testing():
         print("\nTeam Sonic select FAILED")
         print(traceback.format_exc())
         tests_failed += 1
+
+
 
     query.insert("Shadow", "Dark", "Speed")
     query.insert("Rouge", "Dark", "Flight")
@@ -61,7 +65,7 @@ def correctness_testing():
             s = query.select(testkey, [])
             assert len(s) == 1
             for r in s:
-                assert r.columns[r.key_index] == testkey
+                assert r[0] == testkey
 
         print("\nTeam Dark select passed")
         tests_passed += 1
@@ -70,6 +74,10 @@ def correctness_testing():
         print("\nTeam Dark select FAILED")
         print(traceback.format_exc())
         tests_failed += 1
+
+
+    return
+    #########################
 
     query.update(0, "Sonic", "Sonic", "Napping")
 
@@ -163,5 +171,5 @@ def performance_testing():
 
 if __name__ == "__main__":
     correctness_testing()
-    performance_testing()
+    # performance_testing()
     print("\n\n")
