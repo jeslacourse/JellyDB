@@ -4,6 +4,7 @@ from JellyDB.logical_page import LogicalPage
 from JellyDB.page import Page
 from JellyDB.config import Config
 from time import time_ns
+import numpy as np
 
 """
 # the page directory should map from RIDs to this
@@ -13,6 +14,10 @@ class RecordLocation:
         self.range = the_range
         self.page = page
         self.offset = offset
+
+class Record:
+    def __init__(self, columns):
+        self.columns = columns
 
 # Why not have a "PageRange" class? Because a "PageRange" is just data with no
 # functionality. We can use a list to represent it, and just use functions in
@@ -27,6 +32,7 @@ class Table:
     def __init__(self, name: str, num_data_columns: int, key: int, RID_allocator: RIDAllocator):
         self._name = name
         self._key = key
+        self.num_columns = num_data_columns # expected by tester.py
         self._num_columns = num_data_columns + Config.METADATA_COLUMN_COUNT
         self._RID_allocator = RID_allocator
         self.record_count = 0
@@ -39,6 +45,11 @@ class Table:
 
         self._recreate_page_directory()
         self._indices.create_index(self.internal_id(key)) # we always want an index on the key
+
+        # From Yinuo branch
+        self.boolean_column =  list(np.zeros((self._num_columns,), dtype=int))
+        self.boolean_column[self._key] = 1
+        self._key_column_boolean = self.boolean_column
 
     """
     # The users of our database only know about their data columns. Since we
@@ -163,7 +174,10 @@ class Table:
         latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
 
         record = latest_version_of_record[self.internal_id(0):]
-        return record
+
+        fancy_record = Record(record)
+
+        return [fancy_record]
 
 
     def assert_not_deleted(self, value_of_indirection_column: int):
@@ -263,7 +277,16 @@ class Table:
     :param aggregate_columns: int   # Index of desired column to aggregate
     """
     def sum(self, start_range: int, end_range: int, aggregate_column_index: int):
-        pass
+        summation = []
+
+        columns_for_sum = self.boolean_column.copy()
+        columns_for_sum[aggregate_column_index] = 1
+        for ids in range(start_range, end_range+1):
+            #find start record first
+            summation.append(self.select(ids, columns_for_sum)[aggregate_column_index])
+
+        return sum(summation)
+        # pass
 
     def __merge(self):
         pass
