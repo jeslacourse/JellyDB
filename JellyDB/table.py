@@ -2,11 +2,17 @@ from JellyDB.rid_allocator import RIDAllocator
 from JellyDB.indices import Indices
 from JellyDB.logical_page import LogicalPage
 from JellyDB.page import Page
+from JellyDB.config import Config
 from time import time
 
-INDIRECTION_COLUMN = 0
-TIMESTAMP_COLUMN = 1
-METADATA_COLUMN_COUNT = 2
+"""
+# the page directory should map from RIDs to this
+"""
+class RecordLocation:
+    def __init__(self, range: int, page: int, offset: int):
+        self.range = range
+        self.page = page
+        self.offset = offset
 
 # Why not have a "PageRange" class? Because a "PageRange" is just data with no
 # functionality. We can use a list to represent it, and just use functions in
@@ -27,6 +33,7 @@ class Table:
         self._indices = Indices()
         self._page_directory = {} # only one copy of each key can be present in a page directory! i.e. records can't have the same key!
         self._page_ranges = [] # list of lists of pages.
+        self._next_tail_RID_to_allocate = [] # List of values, one for each page range
         self._add_page_range()
 
         self._recreate_page_directory()
@@ -47,7 +54,10 @@ class Table:
     # data.
     """
     def internal_id(self, column: int) -> int:
-        return METADATA_COLUMN_COUNT + column
+        return column + Config.METADATA_COLUMN_COUNT
+
+    def external_id(self, column: int):
+        return column - Config.METADATA_COLUMN_COUNT
 
     """
     # delete the record in self.table which has the value `key` in the column used for its primary key
@@ -84,33 +94,75 @@ class Table:
         # Return list of results (currently all columns)
         # TODO: only return requested columns
         return results
+    
+    def assert_not_deleted(self, value_of_indirection_column: int):
+        if value_of_indirection_column >= Config.RECORD_DELETION_MASK:
+            raise Exception("You can't update a deleted record")
 
     """
     # Update a record with specified key and columns
     # "takes as input a list of values for ALL columns of the table. The columns that are not being updated should be passed as None." - Parsoa
+    :param key_index: int   # value in the primary key column of the record we are updating
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
-    # Naive implementation: remove record and add updated record
-    # TODO: add support for None columns
     def update(self, key_index: int, columns: tuple):
-        keyfound = False
+        target_RID = self._indices.locate(self._key, key_index)
+        target_loc = self._page_directory[target_RID]
+        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
 
-        # Check all records for matching key
-        for i in range (0, len(self.record_list)):
-            r = self.record_list[i]
+        # get the latest version of the page
+        current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
+        self.assert_not_deleted(current_indirection)
 
-            # Remove record with matching key
-            if columns[key_index] == r.columns[r.key_index]:
-                self.record_list.pop(i)
-                keyfound = True
-                break
+        if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+            latest_version_logical_page = logical_page_of_target
+            latest_version_offset = target_loc.offset
+        else:
+            latest_version_loc = self._page_directory[current_indirection]
+            latest_version_offset = latest_version_loc.offset
+            latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
 
-        # Complain if no record with that key
-        if not keyfound:
-            raise KeyError(columns[key_index])
+        latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+        
+        tail_RID_of_current_update = self.allocate_next_available_tail_RID(target_loc.range)
 
-        # Insert brand-new record with columns
-        self.insert(columns)
+        # only time we edit the base page: updating indirection column
+        logical_page_of_target.update_indirection_column(target_loc.offset, tail_RID_of_current_update)
+
+        current_update = []
+        for i in range(self._num_columns + Config.METADATA_COLUMN_COUNT):
+            if i == Config.INDIRECTION_COLUMN_INDEX:
+                # old indirection pointer of the base record, which points to the latest update before this one
+                current_update.append(current_indirection)
+            elif i == Config.TIMESTAMP_COLUMN_INDEX:
+                current_update.append(time())
+            else:
+                if columns[self.external_id(i)] is not None:
+                    current_update.append(columns[self.external_id(i)])
+                else:
+                    current_update.append(latest_version_of_record[self.external_id(i)])
+        
+        current_update_loc = self._page_directory[tail_RID_of_current_update]
+
+        self._page_ranges[current_update_loc.range][current_update_loc.page][current_update_loc.offset].write(current_update)
+
+    """
+    # Gets the tail RID that a new updated version of a record should be
+    # written into, creating a new tail page if necessary
+    """
+    def allocate_next_available_tail_RID(self, target_page_range: int):
+        first_available_spot = self._next_tail_RID_to_allocate[target_page_range]
+        if first_available_spot == 0:
+            self._add_tail_page(target_page_range)
+            first_available_spot = self._page_ranges[target_page_range][-1].base_RID
+        next_available_spot = first_available_spot + 1
+        if next_available_spot > self._page_ranges[target_page_range][-1].bound_RID:
+            next_available_spot = 0 # NO SPACE LEFT
+        self._next_tail_RID_to_allocate[target_page_range] = next_available_spot
+
+        return first_available_spot
+        
+
 
     """
     :param start_range: int         # Start of the key range to aggregate
@@ -125,12 +177,13 @@ class Table:
 
     def _add_page_range(self):
         # TODO request base and tail RIDs from self._RID_allocator and generate storage for all base pages and one tail page
+        # Append new value to self._next_tail_RID_to_allocate, which equals the first RID in the tail page of this range
         pass
 
     """
     :param page_range: int  # page range to add the tail page to
     """
-    def _add_tail_page(self, page_range: list):
+    def _add_tail_page(self, page_range: int):
         # TODO get tail RIDs, generate the storage, add it to self.page_ranges[page_range]
         self._recreate_page_directory()
 

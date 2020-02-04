@@ -15,7 +15,7 @@ class LogicalPage:
 
         # Create new array of Page objects, one per col
         self.pages = []
-        for i in range (0, num_columns):
+        for i in range(self.num_columns):
             self.pages.append(Page())
 
 
@@ -26,8 +26,7 @@ class LogicalPage:
     # Read one piece of data from one column in this page
     """
     def get(self, column: int, offset: int):
-        # TODO implement
-        pass
+        return self.pages[column].get_record(offset)
 
     # Lisa added this function
     # Read all columns of a record
@@ -36,22 +35,28 @@ class LogicalPage:
         values = []
 
         # Read values from all columns
-        for i in range (0, self.num_columns):
+        for i in range(self.num_columns):
             values.append(self.pages[i].read(id))
 
         return values
 
     """
     # Append a record to this page (one value per column).
-    :param record: tuple  # a tuple containing one value (possibly `None`) for each column in this kind of page.
+    :param record: list  # a list containing one value (possibly `None`) for each column in this kind of page.
     """
-    def write(self, record: tuple):
+    def write(self, record: list):
         if not self.has_capacity():
             raise Exception("You cannot write to a full page")
 
         # Loop through columns in record
         # Write each value to the corresponding page
-        for i in range (0, len(record)):
-            self.pages[i].write(record[i])
+        for i in range(len(record)):
+            self.pages[i].write(record[i], self.record_count)
 
         self.record_count += 1
+
+    """
+    # Updating anything else breaks the idea of L-Store. Assumeds 
+    """
+    def update_indirection_column(self, offset: int, value: int):
+        self.pages[Config.INDIRECTION_COLUMN_INDEX].write()
