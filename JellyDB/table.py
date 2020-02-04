@@ -231,11 +231,12 @@ class Table:
 
         return RecordLocation(page_rng_index, page_index, offset_of_record)
 
-
     """
     # We exploit the fact that pages have the same number of elements, and that
     # that number is a power of 2; then we only store information about the
     # base RID in any page.
+    #
+    # This stores tuples of (page_range, page). get_record_location figures out the offset.
     """
     def _recreate_page_directory(self):
         # if a number is within <Records-in-page> of a record's rids, that's the page for it!
@@ -245,16 +246,3 @@ class Table:
             for j in range(len(page_rng)):
                 page = page_rng[j]
                 self._page_directory[page.base_RID] = (i,j)
-
-        # search through the pages in the page directory, check the base and
-        # bound RIDs in each LogicalPage, and put them in the page directories.
-        # example: RID 1111101 corresponds to the tenth row of the first tail
-        # page of the second PageRange. So, we need 2 indices and an offset:
-        # data[1][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE][9]. Recall that
-        # the first index of any Python list is 0.
-        # So, our page directory can be a dictionary with key type int (for
-        # our RID) and value type tuple-with-three-elements; in this case
-        # (1, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE, 9).
-        # Why this Config number? Because there are a fixed number of base
-        # pages in any page range; anything after that must be a tail page!
-        pass
