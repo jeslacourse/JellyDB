@@ -25,9 +25,10 @@ class Indices:
     """
     # returns list of RIDs, also known as: the location of all records with the given value in the given column
     """
-    def locate(self, column: int, value: int) -> list:
+    def locate(self, column: int, value: int, verbose=False) -> list:
+        if verbose: print("Attempting to search for value {} in column {}".format(value, column))
         if column not in self.data:
-            raise Exception("No index exists for given column")
+            raise Exception("No index exists for column {}".format(str(column)))
         return self.data[column][value]
 
     """
@@ -47,16 +48,31 @@ class Indices:
     """
     # After this call, self.locate(column, value) should return a list that does not contain RID.
     """
-    def delete(self, column: int, value: int, RID: int):
+    def delete(self, column: int, value: int, RID: int, verbose=False):
+        if verbose:
+            print("indices delete says here is self.data before delete")
+            print(self.data)
+
         if column not in self.data:
             raise Exception("No index exists for given column")
+
+        # Get RIDs associated with the value given
         list_of_RIDs_for_this_value = self.data[column].get(value)
+        if verbose:
+            print("indices delete says here is list of RIDs for value")
+            print(list_of_RIDs_for_this_value)
+
         if list_of_RIDs_for_this_value is None:
             self.data[column][value] = []
             list_of_RIDs_for_this_value = self.data[column][value]
         if value not in list_of_RIDs_for_this_value:
             raise Exception("Value does not exist")
+
+        # Remove RID from index on this value
         list_of_RIDs_for_this_value.remove(RID)
+        if verbose:
+            print("indices delete says here is self.data after delete:")
+            print(self.data)
 
     """
     # Create index on specific column. Should raise Exception if index already exists.
