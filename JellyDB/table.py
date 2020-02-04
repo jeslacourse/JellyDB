@@ -3,7 +3,7 @@ from JellyDB.indices import Indices
 from JellyDB.logical_page import LogicalPage
 from JellyDB.page import Page
 from JellyDB.config import Config
-from time import time
+from time import time_ns
 
 """
 # the page directory should map from RIDs to this
@@ -88,18 +88,19 @@ class Table:
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
     def insert(self, columns: tuple):
-        record_with_metadata = [0, time(), *columns] # no record for indirection col to point to
+        record_with_metadata = [0, time_ns(), *columns] # no record for indirection col to point to
         
         RID = self._allocate_first_available_base_RID()
         record_location = self.get_record_location(RID)
         self._page_ranges[record_location.range][record_location.page].write(record_with_metadata)
 
-        for i in len(record_with_metadata):
+        for i in range(self._num_columns):
             if self._indices.has_index(i):
                 self._indices.insert(i, record_with_metadata[i], RID)
 
     def _allocate_first_available_base_RID(self):
-        if not self._page_ranges[-1][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE - 1].hasCapacity():
+        # Add new page range if necessary
+        if not self._page_ranges[-1][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE - 1].has_capacity():
             self._add_page_range()
         destination_page_range = self._page_ranges[-1]
 
@@ -170,7 +171,7 @@ class Table:
                 # old indirection pointer of the base record, which points to the latest update before this one
                 current_update.append(current_indirection)
             elif i == Config.TIMESTAMP_COLUMN_INDEX:
-                current_update.append(time())
+                current_update.append(time_ns())
             else:
                 if columns[self.external_id(i)] is not None:
                     # we have a new value, update it in the index
@@ -209,8 +210,6 @@ class Table:
         self._next_tail_RID_to_allocate[target_page_range] = next_available_spot
 
         return first_available_spot
-        
-
 
     """
     :param start_range: int         # Start of the key range to aggregate
@@ -226,34 +225,44 @@ class Table:
     def _add_page_range(self):
         self._page_ranges.append(self._RID_allocator.make_page_range(self._num_columns))
         # keep track of the first tail RID in this new page range
-        self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base)
+        self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
         self._recreate_page_directory()
 
     """
     :param page_range: int  # page range to add the tail page to
     """
     def _add_tail_page(self, page_range: int):
-        self._page_ranges[page_range].append(self._RID_allocator.make_tail_page(self._num_columns))
+        self._page_ranges[page_range].append(
+            self._RID_allocator.make_tail_page(self._num_columns)
+        )
         self._recreate_page_directory()
     
     """
+    # There are 4096 RIDs that might be the base RID for the page this RID is
+    # from. We try all of them rather than doing an O(logn) tree search
+    #
+    # Why so naive? With time limitations, this is nasty but still O(1).
     :param RID: int             # can be a tail or base RID
     :returns: RecordLocation    # position of the record with given RID
     """
     def get_record_location(self, RID: int):
-        base_RID_of_record_where_RID_belongs = RID // Config.MAX_RECORDS_PER_PAGE # floor division
-        offset_of_record = RID % Config.MAX_RECORDS_PER_PAGE
+        lowest_RID_that_might_be_the_base_for_this_RIDs_page = \
+            RID - (Config.MAX_RECORDS_PER_PAGE - 1)
+        for i in range(lowest_RID_that_might_be_the_base_for_this_RIDs_page, RID + 1):
+            page_rng_and_page_index = self._page_directory.get(i)
+            if page_rng_and_page_index is not None:
+                page_rng_index = page_rng_and_page_index[0]
+                page_index = page_rng_and_page_index[1]
+                offset = RID - i
+                return RecordLocation(page_rng_index, page_index, offset)
 
-        page_rng_index, page_index = self._page_directory[base_RID_of_record_where_RID_belongs]
-
-        return RecordLocation(page_rng_index, page_index, offset_of_record)
+        raise Exception("Record does not exist in this table")
 
     """
-    # We exploit the fact that pages have the same number of elements, and that
-    # that number is a power of 2; then we only store information about the
-    # base RID in any page.
+    # This stores tuples of (page_range, page). get_record_location() figures
+    # out the offset.
     #
-    # This stores tuples of (page_range, page). get_record_location figures out the offset.
+    # TODO improvement: the page directory does not need to be recreated, just appended into
     """
     def _recreate_page_directory(self):
         # if a number is within <Records-in-page> of a record's rids, that's the page for it!

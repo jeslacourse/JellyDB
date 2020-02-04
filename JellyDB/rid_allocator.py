@@ -11,7 +11,7 @@ class RIDAllocator:
         for i in range(Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):
             pages.append(self.make_base_page(col_count))
         pages.append(self.make_tail_page(col_count))
-        
+
         return pages
 
     """
@@ -20,7 +20,7 @@ class RIDAllocator:
     """
     def make_base_page(self, col_count: int) -> LogicalPage:
         base = self.nextRIDToAssign
-        bound = base + Config.MAX_RECORDS_PER_PAGE
+        bound = base + Config.MAX_RECORDS_PER_PAGE - 1
         self.nextRIDToAssign = bound + 1
         if self.nextRIDToAssign > self.nextTailRIDToAssign:
             raise Exception("Address space full")
@@ -32,7 +32,7 @@ class RIDAllocator:
     """
     def make_tail_page(self, col_count: int) -> LogicalPage:
         bound = self.nextTailRIDToAssign
-        base = bound - Config.MAX_RECORDS_PER_PAGE
+        base = bound - Config.MAX_RECORDS_PER_PAGE + 1
         self.nextTailRIDToAssign = base - 1
         if self.nextTailRIDToAssign < self.nextRIDToAssign:
             raise Exception("Address space full")

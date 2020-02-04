@@ -36,7 +36,7 @@ class Indices:
     def insert(self, column: int, value: int, RID: int):
         if column not in self.data:
             raise Exception("No index exists for given column")
-        list_of_RIDs_for_this_value = self.data[column][value]
+        list_of_RIDs_for_this_value = self.data[column].get(value)
         if list_of_RIDs_for_this_value is None:
             self.data[column][value] = []
             list_of_RIDs_for_this_value = self.data[column][value]
@@ -50,7 +50,7 @@ class Indices:
     def delete(self, column: int, value: int, RID: int):
         if column not in self.data:
             raise Exception("No index exists for given column")
-        list_of_RIDs_for_this_value = self.data[column][value]
+        list_of_RIDs_for_this_value = self.data[column].get(value)
         if list_of_RIDs_for_this_value is None:
             self.data[column][value] = []
             list_of_RIDs_for_this_value = self.data[column][value]

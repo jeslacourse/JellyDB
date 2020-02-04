@@ -20,7 +20,7 @@ class LogicalPage:
 
 
     def has_capacity(self):
-        return (self.base_RID + self.record_count) < self.bound_RID
+        return self.first_available_RID() != 0
     
     def first_available_RID(self):
         next_RID = self.base_RID + self.record_count
@@ -53,10 +53,12 @@ class LogicalPage:
     """
     def write(self, record: list) -> int:
         if not self.has_capacity():
+            print(str(self.base_RID) + " " + str(self.bound_RID) + " " + str(self.record_count))
             raise Exception("You cannot write to a full page")
 
         # Loop through columns in record
         # Write each value to the corresponding page
+        print(str(self.base_RID) + " " + str(self.bound_RID))
         for i in range(len(record)):
             self.pages[i].write(record[i], self.record_count)
 

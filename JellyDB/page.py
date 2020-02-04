@@ -26,7 +26,7 @@ class Page:
             raise Exception("value" + value + " out of bounds")
     
         value_as_bytes = value.to_bytes(Config.RECORD_SIZE_IN_BYTES, Config.INT_BYTE_ORDER, signed=False)
-    
+        
         first_byte_in_page_to_write_to = index*Config.RECORD_SIZE_IN_BYTES
     
         for i in range(Config.RECORD_SIZE_IN_BYTES):

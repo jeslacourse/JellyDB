@@ -3,13 +3,11 @@ Usage: python -m JellyDB.tester
 """
 from JellyDB.db import Database
 from JellyDB.query import Query
-from JellyDB.config import init
 
 from random import choice, randint, sample, seed
 from colorama import Fore, Back, Style
 
 # Student Id and 4 grades
-init()
 db = Database()
 grades_table = db.create_table('Grades', 5, 0)
 query = Query(grades_table)

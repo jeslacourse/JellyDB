@@ -6,7 +6,7 @@ class Config:
     
     # Every page of database data allocated will have this many bytes in it
     PAGE_SIZE = _HARD_DISK_PAGE_SIZE
-    MAX_RECORDS_PER_PAGE = PAGE_SIZE / RECORD_SIZE_IN_BYTES
+    MAX_RECORDS_PER_PAGE = PAGE_SIZE // RECORD_SIZE_IN_BYTES
     
     # Every deleted record will have the first available bit flipped 
     RECORD_DELETION_MASK = 2**63
