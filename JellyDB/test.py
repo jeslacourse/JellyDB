@@ -3,6 +3,7 @@ Usage: python -m JellyDB.test
 """
 from JellyDB.db import Database
 from JellyDB.query import Query
+from JellyDB.config import Config
 from time import process_time
 from random import choice, randrange
 import traceback
@@ -18,7 +19,7 @@ def correctness_testing():
 
     try:
         assert fav_numbers._name == "fav_numbers"
-        assert fav_numbers._num_columns == 3
+        assert fav_numbers._num_columns == 3 + Config.METADATA_COLUMN_COUNT
         assert fav_numbers._key == 0
 
         print("fav_numbers create table passed")
@@ -30,9 +31,7 @@ def correctness_testing():
         tests_failed += 1
 
 
-
     query = Query(fav_numbers)
-
 
     nums1 = [5, 6, 7]
     nums2 = [25, 26, 27]
@@ -42,15 +41,20 @@ def correctness_testing():
     query.insert(*nums2)
     query.insert(*nums3)
 
-
     try:
         # Try selecting 3 keys from above.
         # Make sure each returns only 1 record and that record is correct.
         for testkey in [5, 25, 99]:
+            # Get all columns
             s = query.select(testkey, [1, 1, 1])
-            assert len(s) == 1
-            for r in s:
-                assert r[0] == testkey
+
+            # Make sure result is right length
+            # At this point select should return a record (not a list of records)
+            # So this is checking how many columns are in that record
+            assert len(s) == 3
+
+            # Make sure primary key matches
+            assert s[0] == testkey
 
         print("\nfav_numbers select passed")
         tests_passed += 1

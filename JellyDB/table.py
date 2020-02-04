@@ -125,20 +125,31 @@ class Table:
     :param query_columns: list # Expect a list of integers: one per column. There will be a 1 if we are to read the column, a 0 otherwise.
     """
     def select(self, keyword, query_columns):
-        # Create empty list of records to return
-        results = []
 
-        # Loop through records (brute force)
-        #for i in range (0, self.logical_page_list[0].record_count):
-        #    current_record = self.logical_page_list[0].read(i)
-        #    # If key matches, append record to results
-        #    if current_record[0] == keyword:
-        #        results.append(current_record)
+        # Find which column holds primary key
+        primary_key_column = self.internal_id(0)
 
-        # Return list of results (currently all columns)
-        # TODO: only return requested columns
-        return results
-    
+        # Get list of matching RIDs from primary key index
+        RIDs = self._indices.locate(primary_key_column, keyword)
+
+        # Indices class returns a list, but at this point we should only get 1 record
+        # Because we're only selecting on primary key
+        if len(RIDs) == 1:
+            RID = RIDs[0]
+        else:
+            raise Exception("Table.py not set up to handle multiple selected values")
+
+        # Get location of that RID
+        record_loc = self.get_record_location(RID)
+
+        # Get record, strip metadata, and return
+        record_with_metadata = \
+            self._page_ranges[record_loc.range][record_loc.page].read(record_loc.offset)
+
+        record = record_with_metadata[self.internal_id(0):]
+        return record
+
+
     def assert_not_deleted(self, value_of_indirection_column: int):
         if value_of_indirection_column >= Config.RECORD_DELETION_MASK:
             raise Exception("You can't update a deleted record")
