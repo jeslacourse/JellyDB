@@ -65,8 +65,11 @@ class Indices:
         if list_of_RIDs_for_this_value is None:
             self.data[column][value] = []
             list_of_RIDs_for_this_value = self.data[column][value]
-        if value not in list_of_RIDs_for_this_value:
-            raise Exception("Value does not exist")
+
+        # Ensure the RID given is associated with the value given
+        if RID not in list_of_RIDs_for_this_value:
+            print(list_of_RIDs_for_this_value)
+            raise Exception("Value {} in column {} not associated with rid {}".format(value, column, RID))
 
         # Remove RID from index on this value
         list_of_RIDs_for_this_value.remove(RID)
