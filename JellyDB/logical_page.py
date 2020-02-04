@@ -43,8 +43,9 @@ class LogicalPage:
     """
     # Append a record to this page (one value per column).
     :param record: list  # a list containing one value (possibly `None`) for each column in this kind of page.
+    :returns: int        # RID of latest record
     """
-    def write(self, record: list):
+    def write(self, record: list) -> int:
         if not self.has_capacity():
             raise Exception("You cannot write to a full page")
 
@@ -54,6 +55,7 @@ class LogicalPage:
             self.pages[i].write(record[i], self.record_count)
 
         self.record_count += 1
+        retrun 
 
     """
     # Updating anything else breaks the idea of L-Store. Assumeds 

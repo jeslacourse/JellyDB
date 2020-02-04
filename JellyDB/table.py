@@ -34,18 +34,11 @@ class Table:
         self._page_directory = {} # only one copy of each key can be present in a page directory! i.e. records can't have the same key!
         self._page_ranges = [] # list of lists of pages.
         self._next_tail_RID_to_allocate = [] # List of values, one for each page range
+
         self._add_page_range()
 
         self._recreate_page_directory()
         self._indices.create_index(self.internal_id(key)) # we always want an index on the key
-
-        # List of logical pages that belong to this table
-        self.logical_page_list = []
-        # Initialize first logical page
-        # 0 and 60 are random values I made up
-        self.logical_page_list.append(LogicalPage(self._num_columns, 0, 60))
-
-        pass
 
     """
     # The users of our database only know about their data columns. Since we
@@ -71,9 +64,8 @@ class Table:
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
     def insert(self, columns: tuple):
-        # Pass columns to write method of logical_page
-        # (I hardcoded this to write to first logical page -Lisa)
-        self.logical_page_list[0].write(columns)
+        pass
+        # TODO add [key, RID] of new record to key index
 
 
     """
@@ -85,11 +77,11 @@ class Table:
         results = []
 
         # Loop through records (brute force)
-        for i in range (0, self.logical_page_list[0].record_count):
-            current_record = self.logical_page_list[0].read(i)
-            # If key matches, append record to results
-            if current_record[0] == keyword:
-                results.append(current_record)
+        #for i in range (0, self.logical_page_list[0].record_count):
+        #    current_record = self.logical_page_list[0].read(i)
+        #    # If key matches, append record to results
+        #    if current_record[0] == keyword:
+        #        results.append(current_record)
 
         # Return list of results (currently all columns)
         # TODO: only return requested columns
@@ -107,7 +99,7 @@ class Table:
     """
     def update(self, key_index: int, columns: tuple):
         target_RID = self._indices.locate(self._key, key_index)
-        target_loc = self._page_directory[target_RID]
+        target_loc = self.get_record_location(target_RID)
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
 
         # get the latest version of the page
@@ -118,7 +110,7 @@ class Table:
             latest_version_logical_page = logical_page_of_target
             latest_version_offset = target_loc.offset
         else:
-            latest_version_loc = self._page_directory[current_indirection]
+            latest_version_loc = self.get_record_location(current_indirection)
             latest_version_offset = latest_version_loc.offset
             latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
 
@@ -138,13 +130,26 @@ class Table:
                 current_update.append(time())
             else:
                 if columns[self.external_id(i)] is not None:
+                    # we have a new value, update it in the index
+                    self.replace_if_indexed(i, target_RID, latest_version_of_record[i], columns[self.external_id(i)])
                     current_update.append(columns[self.external_id(i)])
                 else:
-                    current_update.append(latest_version_of_record[self.external_id(i)])
+                    current_update.append(latest_version_of_record[i])
         
-        current_update_loc = self._page_directory[tail_RID_of_current_update]
+        current_update_loc = self.get_record_location(tail_RID_of_current_update)
 
         self._page_ranges[current_update_loc.range][current_update_loc.page][current_update_loc.offset].write(current_update)
+
+    """
+    # Convenience method to replace one value in an index with another
+    :param internal_col: int    # Column number seen inside the table, which means taking into account metadata columns
+    """
+    def replace_if_indexed(self, internal_col: int, RID: int, old_value: int, new_value: int):
+        if not self._indices.has_index(internal_col):
+            return
+        self._indices.delete(internal_col, old_value, RID)
+        self._indices.insert(internal_col, new_value, RID)
+
 
     """
     # Gets the tail RID that a new updated version of a record should be
@@ -176,18 +181,45 @@ class Table:
         pass
 
     def _add_page_range(self):
-        # TODO request base and tail RIDs from self._RID_allocator and generate storage for all base pages and one tail page
-        # Append new value to self._next_tail_RID_to_allocate, which equals the first RID in the tail page of this range
-        pass
+        self._page_ranges.append(self._RID_allocator.make_page_range(self._num_columns))
+        # keep track of the first tail RID in this new page range
+        self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base)
+        self._recreate_page_directory()
 
     """
     :param page_range: int  # page range to add the tail page to
     """
     def _add_tail_page(self, page_range: int):
-        # TODO get tail RIDs, generate the storage, add it to self.page_ranges[page_range]
+        self._page_ranges[page_range].append(self._RID_allocator.make_tail_page(self._num_columns))
         self._recreate_page_directory()
+    
+    """
+    :param RID: int             # can be a tail or base RID
+    :returns: RecordLocation    # position of the record with given RID
+    """
+    def get_record_location(self, RID: int):
+        base_RID_of_record_where_RID_belongs = RID // Config.MAX_RECORDS_PER_PAGE # floor division
+        offset_of_record = RID % Config.MAX_RECORDS_PER_PAGE
 
+        page_rng_index, page_index = self._page_directory[base_RID_of_record_where_RID_belongs]
+
+        return RecordLocation(page_rng_index, page_index, offset_of_record)
+
+
+    """
+    # We exploit the fact that pages have the same number of elements, and that
+    # that number is a power of 2; then we only store information about the
+    # base RID in any page.
+    """
     def _recreate_page_directory(self):
+        # if a number is within <Records-in-page> of a record's rids, that's the page for it!
+        self._page_directory = {}
+        for i in range(len(self._page_ranges)):
+            page_rng = self._page_ranges[i]
+            for j in range(len(page_rng)):
+                page = page_rng[j]
+                self._page_directory[page.base_RID] = (i,j)
+
         # search through the pages in the page directory, check the base and
         # bound RIDs in each LogicalPage, and put them in the page directories.
         # example: RID 1111101 corresponds to the tenth row of the first tail
