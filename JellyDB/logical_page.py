@@ -20,7 +20,13 @@ class LogicalPage:
 
 
     def has_capacity(self):
-        return self.record_count < Config.MAX_RECORDS_PER_PAGE
+        return (self.base_RID + self.record_count) < self.bound_RID
+    
+    def first_available_RID(self):
+        next_RID = self.base_RID + self.record_count
+        if next_RID > self.bound_RID:
+            return 0
+        return next_RID
 
     """
     # Read one piece of data from one column in this page
@@ -55,7 +61,7 @@ class LogicalPage:
             self.pages[i].write(record[i], self.record_count)
 
         self.record_count += 1
-        retrun 
+        return self.base_RID + self.record_count
 
     """
     # Updating anything else breaks the idea of L-Store. Assumeds 

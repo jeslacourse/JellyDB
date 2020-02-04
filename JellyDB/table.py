@@ -49,6 +49,13 @@ class Table:
     def internal_id(self, column: int) -> int:
         return column + Config.METADATA_COLUMN_COUNT
 
+    """
+    # You pass in a column as this table sees it, and it spits out a column
+    # number that the user would pass to us. Example: we might store
+    # (indirection_value, timestamp, student_id). If you pass in 2, which is
+    # the column where we store student_id, it will return 0, because this is
+    # the 0th data column that the user asked us to create.
+    """
     def external_id(self, column: int):
         return column - Config.METADATA_COLUMN_COUNT
 
@@ -64,8 +71,27 @@ class Table:
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
     def insert(self, columns: tuple):
-        pass
-        # TODO add [key, RID] of new record to key index
+        record_with_metadata = [0, time(), *columns] # no record for indirection col to point to
+        
+        RID = self._allocate_first_available_base_RID()
+        record_location = self.get_record_location(RID)
+        self._page_ranges[record_location.range][record_location.page].write(record_with_metadata)
+
+        for i in len(record_with_metadata):
+            if self._indices.has_index(i):
+                self._indices.insert(i, record_with_metadata[i], RID)
+
+    def _allocate_first_available_base_RID(self):
+        if not self._page_ranges[-1][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE - 1].hasCapacity():
+            self._add_page_range()
+        destination_page_range = self._page_ranges[-1]
+
+        for i in range(Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):
+            first_available_RID_in_this_page = destination_page_range[i].first_available_RID()
+            if first_available_RID_in_this_page != 0: # page not full
+                return first_available_RID_in_this_page
+
+        raise Exception("Something went wrong; failed to allocate enough space")
 
 
     """
