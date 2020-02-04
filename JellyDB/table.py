@@ -20,14 +20,14 @@ class RecordLocation:
 class Table:
 
     """
-    :param name: str            #Table name
-    :param num_columns: int     #Number of Columns: all columns are integer
-    :param key: int             #Index of table key in columns
+    :param name: str                #Table name
+    :param num_data_columns: int    #Number of Columns: all columns are integer
+    :param key: int                 #Index of table key in columns
     """
-    def __init__(self, name: str, num_columns, key: int, RID_allocator: RIDAllocator):
+    def __init__(self, name: str, num_data_columns: int, key: int, RID_allocator: RIDAllocator):
         self._name = name
         self._key = key
-        self._num_columns = num_columns
+        self._num_columns = num_data_columns + Config.METADATA_COLUMN_COUNT
         self._RID_allocator = RID_allocator
         self.record_count = 0
         self._indices = Indices()
@@ -64,7 +64,24 @@ class Table:
     :param key: int # the primary key value of the record we are deleting
     """
     def delete(self, key: int):
-        pass
+        RID = self._indices.locate(self._key, key)
+        record_loc = self.get_record_location(RID)
+        record_with_metadata = \
+            self._page_ranges[record_loc.range][record_loc.page].read(record_loc.offset)
+
+        # bitwise OR
+        indirection_value_with_deletion_flag = \
+            record_with_metadata[Config.INDIRECTION_COLUMN_INDEX] | Config.RECORD_DELETION_MASK
+
+        # flag as deleted
+        self._page_ranges[record_loc.range][record_loc.page] \
+            .update_indirection_column(record_loc.offset, indirection_value_with_deletion_flag)
+
+        # delete all values from the index
+        for i in range(self._num_columns): 
+            if self._indices.has_index(i):
+                self._indices.delete(i, record_with_metadata[i], RID)
+
 
     """
     # Insert a record with specified columns
@@ -148,7 +165,7 @@ class Table:
         logical_page_of_target.update_indirection_column(target_loc.offset, tail_RID_of_current_update)
 
         current_update = []
-        for i in range(self._num_columns + Config.METADATA_COLUMN_COUNT):
+        for i in range(self._num_columns):
             if i == Config.INDIRECTION_COLUMN_INDEX:
                 # old indirection pointer of the base record, which points to the latest update before this one
                 current_update.append(current_indirection)
