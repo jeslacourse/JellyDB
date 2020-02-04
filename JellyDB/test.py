@@ -12,84 +12,51 @@ def correctness_testing():
     tests_passed = 0
     tests_failed = 0
 
-    # Sonic Heroes characters
+    # Favorite numbers table
     db = Database()
-    heroes_table = db.create_table('Heroes', 3, 0)
+    fav_numbers = db.create_table('fav_numbers', 3, 0)
 
     try:
-        assert heroes_table._name == "Heroes"
-        assert heroes_table._num_columns == 3
-        assert heroes_table._key == 0
+        assert fav_numbers._name == "fav_numbers"
+        assert fav_numbers._num_columns == 3
+        assert fav_numbers._key == 0
 
-        print("Heroes create table passed")
+        print("fav_numbers create table passed")
         tests_passed += 1
 
-    except:
-        print("Heroes create table FAILED")
+    except Exception as exc:
+        print("fav_numbers create table FAILED")
+        print(traceback.format_exc())
         tests_failed += 1
 
-    query = Query(heroes_table)
-    keys = []
 
-    query.insert("Sonic", "Sonic", "Speed")
-    query.insert("Tails", "Sonic", "Flight")
-    query.insert("Knuckles", "Sonic", "Power")
+
+    query = Query(fav_numbers)
+
+
+    nums1 = [5, 6, 7]
+    nums2 = [25, 26, 27]
+    nums3 = [99, 98, 97]
+
+    query.insert(*nums1)
+    query.insert(*nums2)
+    query.insert(*nums3)
 
 
     try:
-        # Try selecting "Sonic", "Tails", and "Knuckles".
+        # Try selecting 3 keys from above.
         # Make sure each returns only 1 record and that record is correct.
-        for testkey in ["Sonic", "Tails", "Knuckles"]:
+        for testkey in [5, 25, 99]:
             s = query.select(testkey, [1, 1, 1])
             assert len(s) == 1
             for r in s:
                 assert r[0] == testkey
 
-        print("\nTeam Sonic select passed")
+        print("\nfav_numbers select passed")
         tests_passed += 1
 
     except Exception as exc:
-        print("\nTeam Sonic select FAILED")
-        print(traceback.format_exc())
-        tests_failed += 1
-
-
-
-    query.insert("Shadow", "Dark", "Speed")
-    query.insert("Rouge", "Dark", "Flight")
-    query.insert("Omega", "Dark", "Power")
-
-    try:
-        for testkey in ["Shadow", "Rouge", "Omega"]:
-            # print("Testing", testkey)
-            s = query.select(testkey, [])
-            assert len(s) == 1
-            for r in s:
-                assert r[0] == testkey
-
-        print("\nTeam Dark select passed")
-        tests_passed += 1
-
-    except Exception as exc:
-        print("\nTeam Dark select FAILED")
-        print(traceback.format_exc())
-        tests_failed += 1
-
-
-    return
-    #########################
-
-    query.update(0, "Sonic", "Sonic", "Napping")
-
-    # Should get KeyError when trying to update non-existent record
-    try:
-        query.update(0, "Eggman", "Villain", "Narcissism")
-        assert False, "Expected KeyError for Eggman"
-    except KeyError:
-        print("\nEggman update KeyError passed")
-        tests_passed += 1
-    except Exception as exc:
-        print("\nEggman update KeyError FAILED")
+        print("\nfav_numbers select FAILED")
         print(traceback.format_exc())
         tests_failed += 1
 
