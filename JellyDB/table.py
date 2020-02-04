@@ -157,15 +157,22 @@ class Table:
     """
     # Update a record with specified key and columns
     # "takes as input a list of values for ALL columns of the table. The columns that are not being updated should be passed as None." - Parsoa
-    :param key_index: int   # value in the primary key column of the record we are updating
+    :param key: int   # value in the primary key column of the record we are updating
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
-    def update(self, key_index: int, columns: tuple):
-        target_RID = self._indices.locate(self._key, key_index)
+    def update(self, key: int, columns: tuple):
+
+        # Get RID of record to update
+        target_RIDs = self._indices.locate(self.internal_id(self._key), key)
+        target_RID = target_RIDs[0]
+
+        # Find which logical page it lives on
         target_loc = self.get_record_location(target_RID)
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
 
-        # get the latest version of the page
+        # Get the most updated logical page
+        # This will be a base page if no updates have happened yet
+        # Or will be a tail page if it has been updated
         current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
         self.assert_not_deleted(current_indirection)
 
@@ -177,13 +184,17 @@ class Table:
             latest_version_offset = latest_version_loc.offset
             latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
 
+        # Get record from most updated logical page
         latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
         
+        # Assign this tail record a RID
         tail_RID_of_current_update = self.allocate_next_available_tail_RID(target_loc.range)
 
         # only time we edit the base page: updating indirection column
         logical_page_of_target.update_indirection_column(target_loc.offset, tail_RID_of_current_update)
 
+        # Build tail record one column at a time
+        # Indirection, timestamp, and columns passed
         current_update = []
         for i in range(self._num_columns):
             if i == Config.INDIRECTION_COLUMN_INDEX:
@@ -201,7 +212,7 @@ class Table:
         
         current_update_loc = self.get_record_location(tail_RID_of_current_update)
 
-        self._page_ranges[current_update_loc.range][current_update_loc.page][current_update_loc.offset].write(current_update)
+        self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update)
 
     """
     # Convenience method to replace one value in an index with another

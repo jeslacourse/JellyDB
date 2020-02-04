@@ -66,7 +66,7 @@ class LogicalPage:
         return self.base_RID + self.record_count
 
     """
-    # Updating anything else breaks the idea of L-Store. Assumeds 
+    # Indirection column is the only in-place update that happens in L-store.
     """
     def update_indirection_column(self, offset: int, value: int):
-        self.pages[Config.INDIRECTION_COLUMN_INDEX].write()
+        self.pages[Config.INDIRECTION_COLUMN_INDEX].write(value, offset)

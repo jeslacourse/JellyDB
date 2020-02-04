@@ -64,6 +64,21 @@ def correctness_testing():
         print(traceback.format_exc())
         tests_failed += 1
 
+    query.update(5, *(5, 12, 20))
+
+    try:
+        # Try selecting record just updated
+        s = query.select(5, [1, 1, 1])
+        assert s == [5, 12, 20]
+
+        print("\nfav_numbers update + select passed")
+        tests_passed += 1
+
+
+    except Exception as exc:
+        print("\nfav_numbers update + select FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
 
     # print("\nTable dump:")
     # for r in query.table.record_list:
