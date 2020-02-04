@@ -51,14 +51,14 @@ class LogicalPage:
     :param record: list  # a list containing one value (possibly `None`) for each column in this kind of page.
     :returns: int        # RID of latest record
     """
-    def write(self, record: list) -> int:
+    def write(self, record: list, verbose=False) -> int:
         if not self.has_capacity():
             print(str(self.base_RID) + " " + str(self.bound_RID) + " " + str(self.record_count))
             raise Exception("You cannot write to a full page")
 
         # Loop through columns in record
         # Write each value to the corresponding page
-        print(str(self.base_RID) + " " + str(self.bound_RID))
+        if verbose: print(str(self.base_RID) + " " + str(self.bound_RID))
         for i in range(len(record)):
             self.pages[i].write(record[i], self.record_count)
 
