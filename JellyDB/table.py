@@ -9,8 +9,8 @@ from time import time
 # the page directory should map from RIDs to this
 """
 class RecordLocation:
-    def __init__(self, range: int, page: int, offset: int):
-        self.range = range
+    def __init__(self, the_range: int, page: int, offset: int):
+        self.range = the_range
         self.page = page
         self.offset = offset
 
