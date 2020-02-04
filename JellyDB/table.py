@@ -129,7 +129,7 @@ class Table:
         # Find which column holds primary key
         primary_key_column = self.internal_id(0)
 
-        # Get list of matching RIDs from primary key index
+        # Get list of matching base RIDs from primary key index
         RIDs = self._indices.locate(primary_key_column, keyword)
 
         # Indices class returns a list, but at this point we should only get 1 record
@@ -139,14 +139,30 @@ class Table:
         else:
             raise Exception("Table.py not set up to handle multiple selected values")
 
-        # Get location of that RID
-        record_loc = self.get_record_location(RID)
+        # Get location of that base RID
+        target_loc = self.get_record_location(RID)
 
-        # Get record, strip metadata, and return
-        record_with_metadata = \
-            self._page_ranges[record_loc.range][record_loc.page].read(record_loc.offset)
+        # Find what logical page it lives on
+        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
 
-        record = record_with_metadata[self.internal_id(0):]
+        # Get the most updated logical page
+        # This will be a base page if no updates have happened yet
+        # Or will be a tail page if it has been updated
+        current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
+        self.assert_not_deleted(current_indirection)
+
+        if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+            latest_version_logical_page = logical_page_of_target
+            latest_version_offset = target_loc.offset
+        else:
+            latest_version_loc = self.get_record_location(current_indirection)
+            latest_version_offset = latest_version_loc.offset
+            latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+
+        # Get record from most updated logical page
+        latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+
+        record = latest_version_of_record[self.internal_id(0):]
         return record
 
 
