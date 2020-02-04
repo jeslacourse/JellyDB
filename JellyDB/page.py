@@ -40,4 +40,4 @@ class Page:
     def get_record(self, n: int) -> int:
         first_byte = n*Config.RECORD_SIZE_IN_BYTES
         last_byte = first_byte + Config.RECORD_SIZE_IN_BYTES
-        return int.from_bytes(self.data[first_byte:last_byte], Config.INT_BYTE_ORDER, False)
+        return int.from_bytes(self.data[first_byte:last_byte], Config.INT_BYTE_ORDER, signed=False)

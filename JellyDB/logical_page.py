@@ -36,7 +36,7 @@ class LogicalPage:
 
         # Read values from all columns
         for i in range(self.num_columns):
-            values.append(self.pages[i].read(id))
+            values.append(self.pages[i].get_record(id))
 
         return values
 
