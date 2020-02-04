@@ -87,16 +87,24 @@ class Table:
     # Insert a record with specified columns
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
-    def insert(self, columns: tuple):
-        record_with_metadata = [0, time_ns(), *columns] # no record for indirection col to point to
-        
+    def insert(self, columns: tuple, verbose=False):
+        # Prepend metadata to columns
+        # Since this is a new base record, set indirection to 0
+        record_with_metadata = [0, time_ns(), *columns]
+
+        # Get next base rid, find what page it belongs to, and write the record to that page
         RID = self._allocate_first_available_base_RID()
         record_location = self.get_record_location(RID)
         self._page_ranges[record_location.range][record_location.page].write(record_with_metadata)
 
+        # Create entry for this record in index(es)
         for i in range(self._num_columns):
             if self._indices.has_index(i):
+                if verbose: print("table says column {} has index; now inserting in index".format(i))
                 self._indices.insert(i, record_with_metadata[i], RID)
+            else:
+                if verbose: print("table says column {} does not have index; not inserting into index".format(i))
+                pass
 
     def _allocate_first_available_base_RID(self):
         # Add new page range if necessary
