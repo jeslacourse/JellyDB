@@ -18,6 +18,8 @@ class RecordLocation:
 class Record:
     def __init__(self, columns):
         self.columns = columns
+    def __str__(self):
+        return "[{}]".format(", ".join([str(item) for item in self.columns]))
 
 # Why not have a "PageRange" class? Because a "PageRange" is just data with no
 # functionality. We can use a list to represent it, and just use functions in
