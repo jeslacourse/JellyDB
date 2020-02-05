@@ -99,6 +99,10 @@ class Table:
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
     def insert(self, columns: tuple, verbose=False):
+        primary_key_value = columns[self._key]
+        if self._indices.contains(self.internal_id(self._key), primary_key_value):
+            raise Exception("Error: The primary key {} is already in use".format(str(primary_key_value)))
+
         # Prepend metadata to columns
         # Since this is a new base record, set indirection to 0
         record_with_metadata = [0, time_ns(), *columns]
@@ -145,10 +149,12 @@ class Table:
 
         # Indices class returns a list, but at this point we should only get 1 record
         # Because we're only selecting on primary key
+        if RIDs is None:
+            return None
         if len(RIDs) == 1:
             RID = RIDs[0]
         else:
-            raise Exception("Table.py not set up to handle multiple selected values")
+            raise Exception("Someone inserted multiple records with the same key into the primary key index!")
 
         # Get location of that base RID
         target_loc = self.get_record_location(RID)

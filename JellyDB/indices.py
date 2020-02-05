@@ -24,6 +24,7 @@ class Indices:
 
     """
     # returns list of RIDs, also known as: the location of all records with the given value in the given column
+    # Returns "None" if the column exists, but not the value
     """
     def locate(self, column: int, value: int, verbose=False) -> list:
         if verbose: print("Attempting to search for value {} in column {}".format(value, column))
@@ -31,6 +32,14 @@ class Indices:
             raise Exception("No index exists for column {}".format(str(column)))
         return self.data[column][value]
 
+    """
+    # Checks whether a certain value exists in the given column's index
+    """
+    def contains(self, column: int, value: int) -> bool:
+        if column not in self.data:
+            raise Exception("No index exists for column {}".format(str(column)))
+        return self.data[column].get(value) is not None
+    
     """
     # After this call, self.locate(column, value) should return a list containing RID.
     """
