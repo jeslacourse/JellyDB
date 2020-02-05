@@ -142,6 +142,8 @@ class Table:
     :param query_columns: list # Expect a list of integers: one per column. There will be a 1 if we are to read the column, a 0 otherwise.
     """
     def select(self, keyword, query_columns):
+        # For columns not asked by user
+        not_asked_columns = list(np.where(np.array(query_columns) == 0)[0])
 
         # Find which column holds primary key
         primary_key_column = self.internal_id(self._key)
@@ -182,6 +184,10 @@ class Table:
         latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
 
         record = latest_version_of_record[self.internal_id(0):]
+
+        if len(not_asked_columns) > 0:
+            for m in not_asked_columns:
+                record[m] = None
 
         fancy_record = Record(record)
 
