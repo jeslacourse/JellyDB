@@ -1,3 +1,6 @@
+"""
+Usage: python -m JellyDB.tester
+"""
 from JellyDB.db import Database
 from JellyDB.query import Query
 from time import process_time
@@ -13,6 +16,8 @@ def performance_testing(range_to_test):
     grades_table = db.create_table('Grades', 5, 0)
     query = Query(grades_table)
     records = {}
+    tests_passed = 0
+    tests_failed = 0
     insert_time_0 = process_time()
     for i in range(0, range_to_test):
         key = 92106429 + randint(0, 9000)
@@ -70,11 +75,19 @@ def performance_testing(range_to_test):
     agg_time_1 = process_time()
     time_sum = agg_time_1 - agg_time_0
     print('Sum',range_to_test,'records took:  \t\t\t', time_sum)
-    
+
     delete_time_0 = process_time()
     for key in records:
-        query.delete(key)
+        try:
+            query.delete(key)
+            s = query.select(key, [1, 1, 1])
+            assert s == None, "Expected None from attempt to select deleted record"
+            tests_passed += 1
+        except Exception as exc:
+            print("\nfav_numbers delete + select FAILED")
+            print(traceback.format_exc())
+            tests_failed += 1
     delete_time_1 = process_time()
     time_delete= delete_time_1 - delete_time_0
-    print('Deletion',range_to_test,'records took:  \t\t\t', time_delete)
+    print('Deletion',range_to_test,'records took:  \t\t\t', time_delete,'true deletion completed:',tests_passed,'deletion failed:',tests_failed)
     return time_insert,time_select,time_update,time_sum,time_delete
