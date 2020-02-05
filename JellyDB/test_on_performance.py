@@ -1,4 +1,4 @@
-from JellyDB.tester-performance import performance_testing
+from JellyDB.tester_performance import performance_testing
 import matplotlib.pyplot as plt
 
 insertion={}
