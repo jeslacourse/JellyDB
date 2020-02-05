@@ -1,5 +1,5 @@
 # JellyDB
-A python-based database management system based on [L-Store](https://www.researchgate.net/publication/324150481_L-Store_A_Real-time_OLTP_and_OLAP_System).
+A database management module for Python inspired by [L-Store](https://www.researchgate.net/publication/324150481_L-Store_A_Real-time_OLTP_and_OLAP_System).
 
 ## Usage
 
