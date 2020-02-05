@@ -48,7 +48,7 @@ class Table:
 
         # From Yinuo branch
         self.boolean_column =  list(np.zeros((self.num_columns,), dtype=int))
-        self.boolean_column[self._key] = 1
+        self.boolean_column[self.internal_id(self._key)] = 1
         self._key_column_boolean = self.boolean_column
 
     """
@@ -75,7 +75,7 @@ class Table:
     :param key: int # the primary key value of the record we are deleting
     """
     def delete(self, key: int):
-        RID = self._indices.locate(self._key, key)
+        RID = self._indices.locate(self.internal_id(self._key), key)
         record_loc = self.get_record_location(RID)
         record_with_metadata = \
             self._page_ranges[record_loc.range][record_loc.page].read(record_loc.offset)
@@ -142,7 +142,7 @@ class Table:
     def select(self, keyword, query_columns):
 
         # Find which column holds primary key
-        primary_key_column = self.internal_id(0)
+        primary_key_column = self.internal_id(self._key)
 
         # Get list of matching base RIDs from primary key index
         RIDs = self._indices.locate(primary_key_column, keyword)
