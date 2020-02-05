@@ -141,7 +141,7 @@ class Table:
     # Read a record with specified key
     :param query_columns: list # Expect a list of integers: one per column. There will be a 1 if we are to read the column, a 0 otherwise.
     """
-    def select(self, keyword, query_columns):
+    def select(self, keyword, query_columns, verbose = False):
         # For columns not asked by user
         not_asked_columns = list(np.where(np.array(query_columns) == 0)[0])
 
@@ -154,6 +154,10 @@ class Table:
         # Indices class returns a list, but at this point we should only get 1 record
         # Because we're only selecting on primary key
         if RIDs is None:
+            if verbose: print("Select function says: Indices.py returned None, returning None")
+            return None
+        if len(RIDs) == 0:
+            if verbose: print("Select function says: Indices.py returned empty list, returning None")
             return None
         if len(RIDs) == 1:
             RID = RIDs[0]

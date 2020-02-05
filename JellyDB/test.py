@@ -103,6 +103,19 @@ def correctness_testing():
         print(traceback.format_exc())
         tests_failed += 1
 
+    try:
+        query.delete(25)
+        s = query.select(25, [1, 1, 1])
+        assert s == None, "Expected None from attempt to select deleted record"
+
+        print("\nfav_numbers delete + select passed")
+        tests_passed += 1
+
+    except Exception as exc:
+        print("\nfav_numbers delete + select FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
 
     if tests_failed == 0:
         print("\nAll {} tests passed!!! :)".format(str(tests_passed)))
