@@ -50,7 +50,7 @@ class Indices:
         if list_of_RIDs_for_this_value is None:
             self.data[column][value] = []
             list_of_RIDs_for_this_value = self.data[column][value]
-        if value in list_of_RIDs_for_this_value:
+        elif value in list_of_RIDs_for_this_value:
             raise Exception("Value already exists")
         list_of_RIDs_for_this_value.append(RID)
     

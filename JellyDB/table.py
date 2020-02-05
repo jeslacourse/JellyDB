@@ -75,7 +75,9 @@ class Table:
     :param key: int # the primary key value of the record we are deleting
     """
     def delete(self, key: int):
-        RID = self._indices.locate(self.internal_id(self._key), key)
+        if not self._indices.contains(self.internal_id(self._key), key):
+            raise Exception("Primary key {} does not correspond to any record".format(str(key)))
+        RID = self._indices.locate(self.internal_id(self._key), key)[0]
         record_loc = self.get_record_location(RID)
         record_with_metadata = \
             self._page_ranges[record_loc.range][record_loc.page].read(record_loc.offset)
