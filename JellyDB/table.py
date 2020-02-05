@@ -47,7 +47,7 @@ class Table:
         self._indices.create_index(self.internal_id(key)) # we always want an index on the key
 
         # From Yinuo branch
-        self.boolean_column =  list(np.zeros((self._num_columns,), dtype=int))
+        self.boolean_column =  list(np.zeros((self.num_columns,), dtype=int))
         self.boolean_column[self._key] = 1
         self._key_column_boolean = self.boolean_column
 
@@ -89,7 +89,7 @@ class Table:
             .update_indirection_column(record_loc.offset, indirection_value_with_deletion_flag)
 
         # delete all values from the index
-        for i in range(self._num_columns): 
+        for i in range(self._num_columns):
             if self._indices.has_index(i):
                 self._indices.delete(i, record_with_metadata[i], RID)
 
@@ -216,7 +216,7 @@ class Table:
 
         # Get record from most updated logical page
         latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
-        
+
         # Assign this tail record a RID
         tail_RID_of_current_update = self.allocate_next_available_tail_RID(target_loc.range)
 
@@ -239,7 +239,7 @@ class Table:
                     current_update.append(columns[self.external_id(i)])
                 else:
                     current_update.append(latest_version_of_record[i])
-        
+
         current_update_loc = self.get_record_location(tail_RID_of_current_update)
 
         self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update)
@@ -276,14 +276,25 @@ class Table:
     :param end_range: int           # End of the key range to aggregate
     :param aggregate_columns: int   # Index of desired column to aggregate
     """
-    def sum(self, start_range: int, end_range: int, aggregate_column_index: int):
+    def sum(self, start_range: int, end_range: int, aggregate_column_index: int, verbose=False):
         summation = []
 
         columns_for_sum = self.boolean_column.copy()
         columns_for_sum[aggregate_column_index] = 1
         for ids in range(start_range, end_range+1):
             #find start record first
-            summation.append(self.select(ids, columns_for_sum)[aggregate_column_index])
+            try:
+                # Select is returning list of record objects
+                # Subscript 0 gets first item out
+                # And then .columns gets items out of Record object
+                summation.append(self.select(ids, columns_for_sum)[0].columns[aggregate_column_index])
+            # Sum function was breaking if not all RIDs in range had actual records
+            # In this case, Indices.py will throw KeyError
+            # Here we add 0 anytime we catch KeyError
+            except KeyError:
+                if verbose: print("Update says caught KeyError, appending 0")
+                summation.append(0)
+
 
         return sum(summation)
         # pass
@@ -305,7 +316,7 @@ class Table:
             self._RID_allocator.make_tail_page(self._num_columns)
         )
         self._recreate_page_directory()
-    
+
     """
     # There are 4096 RIDs that might be the base RID for the page this RID is
     # from. We try all of them rather than doing an O(logn) tree search
