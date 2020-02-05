@@ -8,6 +8,9 @@ from time import process_time
 from random import choice, randrange
 import traceback
 
+def get_columns(record_object):
+    return record_object[0].columns
+
 def correctness_testing():
     print("\n====Correctness testing:====\n")
     tests_passed = 0
@@ -46,7 +49,7 @@ def correctness_testing():
         # Make sure each returns only 1 record and that record is correct.
         for testkey in [5, 25, 99]:
             # Get all columns
-            s = query.select(testkey, [1, 1, 1])
+            s = get_columns(query.select(testkey, [1, 1, 1]))
 
             # Make sure result is right length
             # At this point select should return a record (not a list of records)
@@ -68,7 +71,7 @@ def correctness_testing():
 
     try:
         # Try selecting record just updated
-        s = query.select(5, [1, 1, 1])
+        s = get_columns(query.select(5, [1, 1, 1]))
         assert s == [5, 12, 20]
 
         print("\nfav_numbers update + select passed")
@@ -83,6 +86,23 @@ def correctness_testing():
     # print("\nTable dump:")
     # for r in query.table.record_list:
     #     print(r.columns)
+
+    try:
+        s = get_columns(query.select(5, [1, 0, 0]))
+        assert s == [5, None, None]
+        s = get_columns(query.select(5, [0, 1, 0]))
+        assert s == [None, 12, None]
+        s = get_columns(query.select(5, [0, 0, 1]))
+        assert s == [None, None, 20]
+
+        print("\nfav_numbers select certain columns only passed")
+        tests_passed += 1
+
+    except Exception as exc:
+        print("\nfav_numbers select certain columns only FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
 
     if tests_failed == 0:
         print("\nAll {} tests passed!!! :)".format(str(tests_passed)))
