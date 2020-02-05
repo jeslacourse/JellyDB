@@ -1,6 +1,3 @@
-"""
-Usage: python -m JellyDB.tester
-"""
 from JellyDB.db import Database
 from JellyDB.query import Query
 from time import process_time
@@ -74,11 +71,10 @@ def performance_testing(range_to_test):
     time_sum = agg_time_1 - agg_time_0
     print('Sum',range_to_test,'records took:  \t\t\t', time_sum)
     
+    delete_time_0 = process_time()
     for key in records:
         query.delete(key)
-        if query.select(key, [1, 1, 1, 1, 1])[0]:
-            return 'Deletion fails'
-        else:
-            print('delet works')
-            
-    return time_insert,time_select,time_update,time_sum
+    delete_time_1 = process_time()
+    time_delete= delete_time_1 - delete_time_0
+    print('Deletion',range_to_test,'records took:  \t\t\t', time_delete)
+    return time_insert,time_select,time_update,time_sum,time_delete
