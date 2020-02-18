@@ -26,7 +26,7 @@ class Query:
     """
     # See table.py.
     """
-    def select(self, key: int, query_columns):
+    def select(self, key: int, column, query_columns):
         return self.table.select(key, query_columns)
 
     """
@@ -37,6 +37,7 @@ class Query:
 
     """
     # See table.py.
+    # This function is only called on the primary key. (Note from teaching staff)
     """
     def sum(self, start_range: int, end_range: int, aggregate_column_index: int):
         return self.table.sum(start_range, end_range, aggregate_column_index)
