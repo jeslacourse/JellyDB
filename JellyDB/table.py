@@ -153,9 +153,15 @@ class Table:
 
     """
     # Read a record with specified key
-    :param query_columns: list # Expect a list of integers: one per column. There will be a 1 if we are to read the column, a 0 otherwise.
+    :param keyword: int             # What value to look for
+    :param column:                  # Which column to look for that value (default to primary key column)
+    :param query_columns: list      # List of integers, one per column. 1 means read the column, 0 means ignore (return None)
     """
     def select(self, keyword, column, query_columns, verbose = False):
+        if verbose:
+            print("Select function says: attempting to locate keyword {} in column {}".format(keyword, column))
+            print("Select function says: query_columns = ", query_columns)
+
         # For columns not asked by user
         not_asked_columns = list(np.where(np.array(query_columns) == 0)[0])
 
@@ -200,6 +206,7 @@ class Table:
         latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
 
         record = latest_version_of_record[self.internal_id(0):]
+        if verbose: print("Select function says: here's the record I found:", record)
 
         if len(not_asked_columns) > 0:
             for m in not_asked_columns:
