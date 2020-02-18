@@ -27,31 +27,44 @@ class Record:
 class Table:
 
     """
-    :param name: str                #Table name
-    :param num_data_columns: int    #Number of Columns: all columns are integer
-    :param key: int                 #Index of table key in columns
+    :param name: str                    # Table name
+    :param num_content_columns: int     # Number of content columns
+    :param key: int                     # Index of which column has primary key
     """
-    def __init__(self, name: str, num_data_columns: int, key: int, RID_allocator: RIDAllocator):
+    def __init__(self, name: str, num_content_columns: int, key: int, RID_allocator: RIDAllocator):
         self._name = name
         self._key = key
-        self.num_columns = num_data_columns # expected by tester.py
-        self._num_columns = num_data_columns + Config.METADATA_COLUMN_COUNT
-        self._RID_allocator = RID_allocator
-        self.record_count = 0
-        self._indices = Indices()
-        self._page_directory = {} # only one copy of each key can be present in a page directory! i.e. records can't have the same key!
-        self._page_ranges = [] # list of lists of pages.
-        self._next_tail_RID_to_allocate = [] # List of values, one for each page range
 
+        # Number of columns holding actual content
+        self._num_content_columns = num_content_columns
+        # Same as above (variable name expected by tester.py)
+        self.num_columns = num_content_columns
+        # Total number of columns, including metadata
+        self._num_columns = num_content_columns + Config.METADATA_COLUMN_COUNT
+
+        # Setup boolean array with 1 for primary key column and 0 for all others (used in sum function)
+        self._key_column_boolean_array = list(np.zeros((self._num_content_columns,), dtype=int))
+        self._key_column_boolean_array[self.internal_id(self._key)] = 1
+
+        # Allocates RIDs for entire table
+        self._RID_allocator = RID_allocator
+        # List of values, one for each page range
+        self._next_tail_RID_to_allocate = []
+
+        # Initialize list of page ranges then create first range
+        self._page_ranges = []
         self._add_page_range()
 
+        # Dictionary of representative rid --> (page range, page no. within range)
+        self._page_directory = {}
         self._recreate_page_directory()
-        self._indices.create_index(self.internal_id(key)) # we always want an index on the key
 
-        # From Yinuo branch
-        self.boolean_column =  list(np.zeros((self.num_columns,), dtype=int))
-        self.boolean_column[self.internal_id(self._key)] = 1
-        self._key_column_boolean = self.boolean_column
+        # Index data structure contains all indexes for table
+        self._indices = Indices()
+        # Setup index on primary key
+        self._indices.create_index(self.internal_id(key))
+
+
 
     """
     # The users of our database only know about their data columns. Since we
@@ -123,7 +136,6 @@ class Table:
                 self._indices.insert(i, record_with_metadata[i], RID)
             else:
                 if verbose: print("table says column {} does not have index; not inserting into index".format(i))
-                pass
 
     def _allocate_first_available_base_RID(self):
         # Add new page range if necessary
@@ -292,17 +304,22 @@ class Table:
         return first_available_spot
 
     """
-    :param start_range: int         # Start of the key range to aggregate
-    :param end_range: int           # End of the key range to aggregate
-    :param aggregate_columns: int   # Index of desired column to aggregate
+    :param start_range: int              # Start of the key range to aggregate
+    :param end_range: int                # End of the key range to aggregate
+    :param aggregate_column_index: int   # Index of desired column to aggregate
     """
     def sum(self, start_range: int, end_range: int, aggregate_column_index: int, verbose=False):
+        # List of values to sum
         summation = []
 
-        columns_for_sum = self.boolean_column.copy()
+        # Setup boolean array for which columns to request with select
+        # Premade boolean array with 1 for primary key column and 0 for all others
+        columns_for_sum = self._key_column_boolean_array.copy()
+        # Also set column we want to sum as 1
         columns_for_sum[aggregate_column_index] = 1
+
         for ids in range(start_range, end_range+1):
-            #find start record first
+            # Find start record first
             try:
                 # Select is returning list of record objects
                 # Subscript 0 gets first item out
@@ -317,7 +334,6 @@ class Table:
 
 
         return sum(summation)
-        # pass
 
     def __merge(self):
         pass
