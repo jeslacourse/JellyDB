@@ -155,15 +155,13 @@ class Table:
     # Read a record with specified key
     :param query_columns: list # Expect a list of integers: one per column. There will be a 1 if we are to read the column, a 0 otherwise.
     """
-    def select(self, keyword, query_columns, verbose = False):
+    def select(self, keyword, column, query_columns, verbose = False):
         # For columns not asked by user
         not_asked_columns = list(np.where(np.array(query_columns) == 0)[0])
 
-        # Find which column holds primary key
-        primary_key_column = self.internal_id(self._key)
-
-        # Get list of matching base RIDs from primary key index
-        RIDs = self._indices.locate(primary_key_column, keyword)
+        # Check index on column user requested
+        # Get list of base RIDs for records with keyword in that column
+        RIDs = self._indices.locate(self.internal_id(column), keyword)
 
         # Indices class returns a list, but at this point we should only get 1 record
         # Because we're only selecting on primary key
@@ -324,7 +322,8 @@ class Table:
                 # Select is returning list of record objects
                 # Subscript 0 gets first item out
                 # And then .columns gets items out of Record object
-                summation.append(self.select(ids, columns_for_sum)[0].columns[aggregate_column_index])
+                # ONLY SUPPORTS SELECTING ON PRIMARY KEY
+                summation.append(self.select(ids, self._key, columns_for_sum)[0].columns[aggregate_column_index])
             # Sum function was breaking if not all RIDs in range had actual records
             # In this case, Indices.py will throw KeyError
             # Here we add 0 anytime we catch KeyError

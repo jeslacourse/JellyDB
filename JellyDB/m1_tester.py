@@ -1,12 +1,15 @@
-from lstore.db import Database
-from lstore.query import Query
-from lstore.config import init
+"""
+Usage: python -m JellyDB.m1_tester
+This tester has been altered to support Milestone 2 select function syntax.
+"""
+from JellyDB.db import Database
+from JellyDB.query import Query
 
 from random import choice, randint, sample, seed
 from colorama import Fore, Back, Style
 
 # Student Id and 4 grades
-init()
+# init()
 db = Database()
 grades_table = db.create_table('Grades', 5, 0)
 query = Query(grades_table)
@@ -24,7 +27,7 @@ for i in range(0, 1000):
     print('inserted', records[key])
 
 for key in records:
-    record = query.select(key, [1, 1, 1, 1, 1])[0]
+    record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
     error = False
     for i, column in enumerate(record.columns):
         if column != records[key][i]:
@@ -42,7 +45,7 @@ for key in records:
         original = records[key].copy()
         records[key][i] = value
         query.update(key, *updated_columns)
-        record = query.select(key, [1, 1, 1, 1, 1])[0]
+        record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
         error = False
         for j, column in enumerate(record.columns):
             if column != records[key][j]:
@@ -63,7 +66,3 @@ for c in range(0, grades_table.num_columns):
             print('sum error on [', keys[r[0]], ',', keys[r[1]], ']: ', result, ', correct: ', column_sum)
         else:
             print('sum on [', keys[r[0]], ',', keys[r[1]], ']: ', column_sum)
-
-
-
-

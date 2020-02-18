@@ -27,7 +27,7 @@ class Query:
     # See table.py.
     """
     def select(self, key: int, column, query_columns):
-        return self.table.select(key, query_columns)
+        return self.table.select(key, column, query_columns)
 
     """
     # The * combines all arguments to the function after `key` into one tuple, columns.
