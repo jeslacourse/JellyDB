@@ -104,6 +104,27 @@ def correctness_testing():
         tests_failed += 1
 
     try:
+        sum = query.sum(5, 99, 0)
+        assert sum == 129, "Sum all entries in column 0, expected 129, found {}".format(str(sum))
+
+        sum = query.sum(5, 99, 1)
+        assert sum == 136, "Sum all entries in column 1, expected 136, found {}".format(str(sum))
+
+        sum = query.sum(5, 6, 1)
+        assert sum == 12, "Sum first entry in column 1, expected 12, found {}".format(str(sum))
+
+        sum = query.sum(25, 99, 2)
+        assert sum == 124, "Sum last two entries in column 2, expected 124, found {}".format(str(sum))
+
+        print("\nfav_numbers sum passed")
+        tests_passed += 1
+
+    except Exception as exc:
+        print("\nfav_numbers sum FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
+    try:
         query.delete(25)
         s = query.select(25, 0, [1, 1, 1])
         assert s == None, "Expected None from attempt to select deleted record"
