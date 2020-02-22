@@ -59,11 +59,11 @@ def correctness_testing():
             # Make sure primary key matches
             assert s[0] == testkey
 
-        print("\nfav_numbers select passed")
+        print("\nfav_numbers primary key select passed")
         tests_passed += 1
 
     except Exception as exc:
-        print("\nfav_numbers select FAILED")
+        print("\nfav_numbers primary key select FAILED")
         print(traceback.format_exc())
         tests_failed += 1
 
@@ -74,12 +74,34 @@ def correctness_testing():
         s = get_columns(query.select(5, 0, [1, 1, 1]))
         assert s == [5, 12, 20]
 
-        print("\nfav_numbers update + select passed")
+        print("\nfav_numbers update + primary key select passed")
         tests_passed += 1
 
 
     except Exception as exc:
-        print("\nfav_numbers update + select FAILED")
+        print("\nfav_numbers update + prikary key select FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
+    try:
+        # Try selecting record with 26 in column 1 (non-primary key)
+        s = get_columns(query.select(26, 1, [1, 1, 1]))
+        assert s == [25, 26, 27]
+
+        # Insert a new record with 26 in column 1
+        query.insert(100, 26, 32)
+        # Try selecting 26 in column 1 again, should get 2 records now
+        s = query.select(26, 1, [1, 1, 1])
+        assert len(s) == 2, "Expected 2 records, instead found {}".format(len(s))
+        for record in s:
+            assert record.columns[1] == 26, "Expected 26 in column 1. Record found was {}".format(record)
+
+        print("\nfav_numbers non-primary key select passed")
+        tests_passed += 1
+
+
+    except Exception as exc:
+        print("\nfav_numbers non-primary key select FAILED")
         print(traceback.format_exc())
         tests_failed += 1
 
