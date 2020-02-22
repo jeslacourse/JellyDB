@@ -59,13 +59,19 @@ class Table:
         self._page_directory = {}
         self._recreate_page_directory()
 
+        self._allocate_temporary_structures()
+
+    """
+    # Anything created in here is destroyed before we save our database to disk
+    """
+    def _allocate_temporary_structures(self):
         # Index data structure contains all indexes for table
         self._indices = Indices()
         # Setup index on primary key
-        self._indices.create_index(self.internal_id(key))
-
-
-
+        self._indices.create_index(self.internal_id(self._key))
+    
+    def _deallocate_temporary_structures(self):
+        self._indices = None
     """
     # The users of our database only know about their data columns. Since we
     # have metadata columns at the beginning of our tables, we must shift any
@@ -345,7 +351,10 @@ class Table:
         pass
 
     def _add_page_range(self):
-        self._page_ranges.append(self._RID_allocator.make_page_range(self._num_columns))
+        name_of_file_where_page_will_be_stored = "{}-{}.bin".format(self._name, len(self._page_ranges))
+        self._page_ranges.append(
+            self._RID_allocator.make_page_range(name_of_file_where_page_will_be_stored, self._num_columns)
+        )
         # keep track of the first tail RID in this new page range
         self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
         self._recreate_page_directory()
@@ -354,8 +363,9 @@ class Table:
     :param page_range: int  # page range to add the tail page to
     """
     def _add_tail_page(self, page_range: int):
+        name_of_file_where_page_will_be_stored = "{}-{}.bin".format(self._name, page_range)
         self._page_ranges[page_range].append(
-            self._RID_allocator.make_tail_page(self._num_columns)
+            self._RID_allocator.make_tail_page(name_of_file_where_page_will_be_stored, self._num_columns)
         )
         self._recreate_page_directory()
 
@@ -394,3 +404,9 @@ class Table:
             for j in range(len(page_rng)):
                 page = page_rng[j]
                 self._page_directory[page.base_RID] = (i,j)
+    
+    def open(self):
+        self._allocate_temporary_structures()
+    
+    def close(self):
+        self._deallocate_temporary_structures()

@@ -1,4 +1,5 @@
 from JellyDB.config import Config
+from JellyDB.bufferpool import Bufferpool
 from JellyDB.page import Page
 
 # This logical page has one physical page for every column.
@@ -7,7 +8,7 @@ from JellyDB.page import Page
 # However, this class will be oblivious to whether a column is data or
 # metadata... it just knows it holds several physical pages
 class LogicalPage:
-    def __init__(self, num_columns: int, base_RID: int, bound_RID: int):
+    def __init__(self, filename: str, num_columns: int, base_RID: int, bound_RID: int, bufferpool: Bufferpool):
         self.record_count = 0
         self.num_columns = num_columns
         self.base_RID = base_RID
@@ -16,7 +17,7 @@ class LogicalPage:
         # Create new array of Page objects, one per col
         self.pages = []
         for i in range(self.num_columns):
-            self.pages.append(Page())
+            self.pages.append(Page(filename, bufferpool))
 
 
     def has_capacity(self):
