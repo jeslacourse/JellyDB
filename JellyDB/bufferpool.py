@@ -7,12 +7,11 @@ import os
 # This provides Page objects with access to their buffers without letting them
 # know whether the page objects were on disk or in memory. 
 # We are lazy - only increase size of bufferpool when someone requests something.
+#
+# You must call "open" before using this class.
 class Bufferpool:
-    # this will have an array of open buffers, with a hash table telling you
-    # which one is open. TODO maybe just an int index instead?
-    # We will need an eviction policy and way to write to disk
     def __init__(self):
-        self._allocate_members()
+        pass
     
     def _allocate_members(self):
         self.data = []
@@ -34,11 +33,11 @@ class Bufferpool:
     :returns: PhysicalPageLocation   # the unique disk location of YOUR (you being a physical page) data
     """
     def allocate_page_id(self, table: str, __range: int) -> PhysicalPageLocation:
-        page = open(PhysicalPageLocation.filename_from(table, __range), "ab+")
+        page = open(PhysicalPageLocation.filename_from(self.path_to_db_files, table, __range), 'ab+')
         number_of_pages_already_in_file = page.tell() // Config.PAGE_SIZE
         page.write(b"\x00" * Config.PAGE_SIZE) # Guarantees there is enough space to store on disk BEFORE we start performing transactions
         page.close()
-        return PhysicalPageLocation(table, __range, number_of_pages_already_in_file)
+        return PhysicalPageLocation(self.path_to_db_files, table, __range, number_of_pages_already_in_file)
     
     def pin(self, page: BufferedPage):
         page.transactions_using += 1
@@ -52,14 +51,14 @@ class Bufferpool:
     def write(self, physical_page_location: PhysicalPageLocation, value: int, index: int):
         buffered_page = self._get_page(physical_page_location, True)
         self.pin(buffered_page)
-        PageUtils.write(buffered_page.page, value, index)
-        self.unpin(buffered_page)
+        PageUtils.write(buffered_page.data, value, index)
+        self.unpin(physical_page_location)
     
     def read(self, physical_page_location: PhysicalPageLocation, offset_within_page: int) -> int:
         buffered_page = self._get_page(physical_page_location, True)
         self.pin(buffered_page)
-        val = PageUtils.get_record(buffered_page.page, offset_within_page)
-        self.unpin(buffered_page)
+        val = PageUtils.get_record(buffered_page.data, offset_within_page)
+        self.unpin(physical_page_location)
         return val
     
     def _get_frame_number_for_page(self, physical_page_location: PhysicalPageLocation) -> int:
@@ -105,7 +104,7 @@ class Bufferpool:
         page_to_evict = self.data[frame_of_page_to_evict]
         if page_to_evict.valid and page_to_evict.dirty:
             page_to_evict.flush_to_disk()
-        self.where_to_find_page_in_pool[page_to_evict.physical_page_location] = None # This page will no longer be able to be found in the index
+        del self.where_to_find_page_in_pool[page_to_evict.physical_page_location] # This page will no longer be able to be found in the index
         return frame_of_page_to_evict
     
     def get_index_of_LRU_page_we_can_evict(self):
@@ -124,10 +123,15 @@ class Bufferpool:
         self._deallocate_members()
     
     # When db.open
-    def open(self):
+    def open(self, path: str):
         self._allocate_members()
+        self.path_to_db_files = path
 
-    def drop_table(self, table: str, __ranges: int):
-        # TODO invalidate all pages with that table name, (throwing exception if any are pinned?)
-        # TODO delete all files that belong to that table
-        pass
+    def invalidate_pages_of(self, table: str):
+        for page in self.data:
+            if page.valid and page.physical_page_location.table == table:
+                if page.transactions_using > 0:
+                    raise Exception(
+                        "cannot invalidate page {} in bufferpool; {} transactions are using it".format(str(page), str(page.transactions_using))
+                    )
+                page.valid = False

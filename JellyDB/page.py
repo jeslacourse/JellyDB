@@ -11,8 +11,8 @@ from JellyDB.bufferpool import Bufferpool
 # You can read or write integers between 0 and 2**64 - 1 to instances of this class.
 """
 class Page:
-    def __init__(self, filename: str, bufferpool: Bufferpool):
-        self.physical_page_location = bufferpool.allocate_page_id(filename)
+    def __init__(self, table: str, __range: int, bufferpool: Bufferpool):
+        self.physical_page_location = bufferpool.allocate_page_id(table, __range)
         self.bufferpool = bufferpool
     
     """

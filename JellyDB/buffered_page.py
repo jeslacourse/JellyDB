@@ -20,7 +20,7 @@ class BufferedPage:
         with open(physical_page_location.filename, "rb") as page_file: # TODO confirm `b` is a good mode to use
             byte_offset_of_target_page = Config.PAGE_SIZE*physical_page_location.index_within_file
             page_file.seek(byte_offset_of_target_page, 0)
-            self.data = page_file.read(Config.PAGE_SIZE)
+            self.data = bytearray(page_file.read(Config.PAGE_SIZE))
     
     """
     # Flushes to disk whether dirty or not

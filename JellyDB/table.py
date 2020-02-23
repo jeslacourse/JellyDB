@@ -1,8 +1,8 @@
 from JellyDB.rid_allocator import RIDAllocator
 from JellyDB.indices import Indices
-from JellyDB.logical_page import LogicalPage
 from JellyDB.page import Page
 from JellyDB.config import Config
+from JellyDB.physical_page_location import PhysicalPageLocation
 from time import time_ns
 import numpy as np
 
@@ -24,6 +24,8 @@ class Record:
 # Why not have a "PageRange" class? Because a "PageRange" is just data with no
 # functionality. We can use a list to represent it, and just use functions in
 # the Table class to manipulate them.
+#
+# You must call "open" before you use this class
 class Table:
 
     """
@@ -59,18 +61,19 @@ class Table:
         self._page_directory = {}
         self._recreate_page_directory()
 
-        self._allocate_temporary_structures()
+        self.allocate_ephemeral_structures()
 
     """
     # Anything created in here is destroyed before we save our database to disk
     """
-    def _allocate_temporary_structures(self):
+    def allocate_ephemeral_structures(self):
+        print("allocating for {}".format(self._name))
         # Index data structure contains all indexes for table
         self._indices = Indices()
         # Setup index on primary key
         self._indices.create_index(self.internal_id(self._key))
     
-    def _deallocate_temporary_structures(self):
+    def deallocate_ephemeral_structures(self):
         self._indices = None
     """
     # The users of our database only know about their data columns. Since we
@@ -351,9 +354,8 @@ class Table:
         pass
 
     def _add_page_range(self):
-        name_of_file_where_page_will_be_stored = "{}-{}.bin".format(self._name, len(self._page_ranges))
         self._page_ranges.append(
-            self._RID_allocator.make_page_range(name_of_file_where_page_will_be_stored, self._num_columns)
+            self._RID_allocator.make_page_range(self._name, len(self._page_ranges), self._num_columns)
         )
         # keep track of the first tail RID in this new page range
         self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
@@ -363,9 +365,8 @@ class Table:
     :param page_range: int  # page range to add the tail page to
     """
     def _add_tail_page(self, page_range: int):
-        name_of_file_where_page_will_be_stored = "{}-{}.bin".format(self._name, page_range)
         self._page_ranges[page_range].append(
-            self._RID_allocator.make_tail_page(name_of_file_where_page_will_be_stored, self._num_columns)
+            self._RID_allocator.make_tail_page(self._name, page_range, self._num_columns)
         )
         self._recreate_page_directory()
 
@@ -405,8 +406,5 @@ class Table:
                 page = page_rng[j]
                 self._page_directory[page.base_RID] = (i,j)
     
-    def open(self):
-        self._allocate_temporary_structures()
-    
-    def close(self):
-        self._deallocate_temporary_structures()
+    def delete_all_files_owned_in(self, path_to_db_files: str):
+        PhysicalPageLocation.delete_table_files(path_to_db_files, self._name, len(self._page_ranges))
