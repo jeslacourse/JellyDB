@@ -23,7 +23,7 @@ class Database():
             with open(self.db_backup_filename, "rb") as db_backup:
                 db_data_bundle = pickle.load(db_backup)
                 self.tables = db_data_bundle.tables
-                for table in self.tables:
+                for table in self.tables.values():
                     table.allocate_ephemeral_structures()
                 self.bufferpool = db_data_bundle.bufferpool
                 self.RID_allocator = db_data_bundle.RID_allocator

@@ -105,6 +105,8 @@ class Bufferpool:
         if page_to_evict.valid and page_to_evict.dirty:
             page_to_evict.flush_to_disk()
         del self.where_to_find_page_in_pool[page_to_evict.physical_page_location] # This page will no longer be able to be found in the index
+        page_to_evict.valid = False
+        
         return frame_of_page_to_evict
     
     def get_index_of_LRU_page_we_can_evict(self):
