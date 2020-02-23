@@ -21,7 +21,7 @@ class LogicalPage:
 
     def has_capacity(self):
         return self.first_available_RID() != 0
-    
+
     def first_available_RID(self):
         next_RID = self.base_RID + self.record_count
         if next_RID > self.bound_RID:
@@ -64,6 +64,7 @@ class LogicalPage:
 
         self.record_count += 1
         return self.base_RID + self.record_count
+
 
     """
     # Indirection column is the only in-place update that happens in L-store.

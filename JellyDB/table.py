@@ -52,6 +52,14 @@ class Table:
         self.boolean_column =  list(np.zeros((self.num_columns,), dtype=int))
         self.boolean_column[self.internal_id(self._key)] = 1
         self._key_column_boolean = self.boolean_column
+        '''mildstone2 attribute'''
+        self.current_tail_rid = 0
+        self.current_base_rid = 0
+        self.check_merge = []
+        self.TPS = Config.START_TAIL_RID
+        self.updating = False
+        self.tail_page_count = 0
+
 
     """
     # The users of our database only know about their data columns. Since we
@@ -109,13 +117,14 @@ class Table:
 
         # Prepend metadata to columns
         # Since this is a new base record, set indirection to 0
-        record_with_metadata = [0, time_ns(), *columns]
+        # also base rid metatcolumn will be 0
+        record_with_metadata = [0, time_ns(), 0, *columns]
 
         # Get next base rid, find what page it belongs to, and write the record to that page
         RID = self._allocate_first_available_base_RID()
         record_location = self.get_record_location(RID)
         self._page_ranges[record_location.range][record_location.page].write(record_with_metadata)
-
+        '''track current base RID'''
         # Create entry for this record in index(es)
         for i in range(self._num_columns):
             if self._indices.has_index(i):
@@ -123,7 +132,14 @@ class Table:
                 self._indices.insert(i, record_with_metadata[i], RID)
             else:
                 if verbose: print("table says column {} does not have index; not inserting into index".format(i))
-                pass
+
+        self.current_base_rid = RID
+        #check if the output is integer
+        if (self.current_base_rid % Config.TOTAL_RECORDS_FULL) == 0:
+            print('basepage full')
+            self.check_merge.append([record_location.range,record_location.page])#list of base pages ready to merge
+            print(self.check_merge)
+        #print(self._page_ranges)
 
     def _allocate_first_available_base_RID(self):
         # Add new page range if necessary
@@ -215,7 +231,8 @@ class Table:
         # Get RID of record to update
         target_RIDs = self._indices.locate(self.internal_id(self._key), key)
         target_RID = target_RIDs[0]
-
+        #get the base_rid for tail record metadata update
+        target_base_RID = target_RIDs[-1]
         # Find which logical page it lives on
         target_loc = self.get_record_location(target_RID)
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
@@ -239,7 +256,7 @@ class Table:
 
         # Assign this tail record a RID
         tail_RID_of_current_update = self.allocate_next_available_tail_RID(target_loc.range)
-
+        #print(tail_RID_of_current_update)
         # only time we edit the base page: updating indirection column
         logical_page_of_target.update_indirection_column(target_loc.offset, tail_RID_of_current_update)
 
@@ -252,6 +269,8 @@ class Table:
                 current_update.append(current_indirection)
             elif i == Config.TIMESTAMP_COLUMN_INDEX:
                 current_update.append(time_ns())
+            elif i == Config.BASE_RID_FOR_TAIL_PAGE_INDEX:
+                current_update.append(target_base_RID)
             else:
                 if columns[self.external_id(i)] is not None:
                     # we have a new value, update it in the index
@@ -261,8 +280,18 @@ class Table:
                     current_update.append(latest_version_of_record[i])
 
         current_update_loc = self.get_record_location(tail_RID_of_current_update)
+        '''track current tail rid'''
+        self.current_tail_rid = tail_RID_of_current_update
 
         self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update)
+        if ((Config.START_TAIL_RID-self.current_tail_rid) % Config.MAX_RECORDS_PER_PAGE) == 0:
+            print(self.current_tail_rid)
+            print('tail page full')
+            #print(self.current_tail_rid)
+            print(current_update_loc.range)
+            print(current_update_loc.page)
+            self.__merge(current_update_loc.range, current_update_loc.page, self.current_tail_rid)
+            #print(self._page_ranges)
 
     """
     # Convenience method to replace one value in an index with another
@@ -319,8 +348,95 @@ class Table:
         return sum(summation)
         # pass
 
-    def __merge(self):
-        pass
+    #call merge function
+    #__merge is used to check if merge should take place
+    def __merge(self, range, page, tail_rid):
+        #first check merge condition: currently start merge once tail page is full
+        can_merge = False
+        #print(range)
+        try:
+            if self.check_merge[range][0] ==range:
+             #same base page range and tail page range are full
+                can_merge =True
+        except IndexError:
+            can_merge = False
+            print('base page range',range,'not full yet')
+        #print(tail_rid)
+        if can_merge:
+            self.merge(tail_rid, range, page)
+            #second check if base pages for merge is full
+
+
+    #actual merge function
+    def merge(self,_tail_rid,_range,_page):
+        print('do merge')
+        #print(current_base_pages)
+        base_rid_tobe_changed = []
+        record_tobe_changed = {}
+        merged_records = []
+        print(_tail_rid)
+        count = 0
+        '''
+        latest_version_loc = self.get_record_location(9223372036854775807)
+        latest_version_offset = latest_version_loc.offset
+        latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+        latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+        record = latest_version_of_record[self.internal_id(0):]
+        fancy_record = Record(record)
+        for i, column in enumerate(fancy_record.columns):
+            print(fancy_record)
+        '''
+        for id in range(_tail_rid, _tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
+            count +=1
+            per_update_in_tail_page = self.get_record_location(id)
+            current_tail_page = self._page_ranges[per_update_in_tail_page.range][per_update_in_tail_page.page]
+            base_rid_unique = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, per_update_in_tail_page.offset)
+            if base_rid_unique not in base_rid_tobe_changed:
+                base_rid_tobe_changed.append(base_rid_unique)
+                record_tobe_changed[base_rid_unique]=current_tail_page.read(per_update_in_tail_page.offset)[self.internal_id(0):]
+        #print(count)
+        #print(base_rid_tobe_changed)
+        #print(record_tobe_changed)
+
+        for baseid in range(Config.START_RID, Config.TOTAL_RECORDS_FULL+1):
+            per_record_in_base_page = self.get_record_location(baseid)
+            per_record_tobe_merge = self._page_ranges[per_record_in_base_page.range][per_record_in_base_page.page]
+            current_base_record = per_record_tobe_merge.read(per_record_in_base_page.offset)[self.internal_id(0):]
+            if baseid in base_rid_tobe_changed:
+                merged_records.append(record_tobe_changed[baseid])
+            else:
+                merged_records.append(current_base_record)
+        print('finish merge')
+        print(self.TPS)
+        self.TPS = _tail_rid
+        print(self.TPS)
+        print(merged_records)
+        self._page_directory_reallocation(merged_records,_range)
+        self.tail_page_count = _page
+
+    #def get_current_metadata_column(self, record):
+
+
+    def _page_directory_reallocation(self, records, __range):
+        self.updating = True
+        merge_count = 0
+        #self._add_merged_page(range)#change!need lock!
+        #self._page_ranges[page_range].append(LogicalPage.write_merged_record(self.column))
+        for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
+            PAGES = self._page_ranges[__range][n].pages#base pages will always remain as first several pages in the logical page range
+            for i in range(self.num_columns): #PAGES FOR MERGED BASE RECORDS, insert into the original Pages() (column store)
+                PAGES.insert(i+Config.METADATA_COLUMN_COUNT, Page())
+            for record in records[n*Config.MAX_RECORDS_PER_PAGE:(n+1)*Config.MAX_RECORDS_PER_PAGE]:
+                for k in range(len(record)):
+                    PAGES[k+Config.METADATA_COLUMN_COUNT].write(record[k], merge_count)
+                merge_count+=1
+            merge_count = 0
+            #self._page_ranges[range][basepage].pages = self._page_ranges[range][basepage].pages[:self._num_columns]#
+            #reading at logical pages always return first serveral columns, metadata + userdefined columns
+            #so merged columns inserted will be directly detected.
+        self._recreate_page_directory()
+        self.updating = False
+        #print(records)
 
     def _add_page_range(self):
         self._page_ranges.append(self._RID_allocator.make_page_range(self._num_columns))
@@ -336,6 +452,7 @@ class Table:
             self._RID_allocator.make_tail_page(self._num_columns)
         )
         self._recreate_page_directory()
+
 
     """
     # There are 4096 RIDs that might be the base RID for the page this RID is
