@@ -40,7 +40,7 @@ class Database():
         for table in self.tables:
             self.tables[table].deallocate_ephemeral_structures()
 
-        with open(self.db_backup_filename, "wb+") as db_file:        
+        with open(self.db_backup_filename, "w+b") as db_file:        
             to_pickle = DBDataBundle(self.tables, self.bufferpool, self.RID_allocator)
             pickle.dump(to_pickle, db_file)
             self.path_to_db_files = None

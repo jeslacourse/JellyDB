@@ -1,5 +1,6 @@
 from JellyDB.config import Config
 from JellyDB.physical_page_location import PhysicalPageLocation
+import difflib
 
 class BufferedPage:
     def __init__(self, physical_page_location: PhysicalPageLocation):
@@ -35,8 +36,8 @@ class BufferedPage:
         elif self.physical_page_location is None:
             raise Exception("I don't know where to flush my data (if I have any)!")
         
-        with open(self.physical_page_location.filename, "ab") as page_file:
-            start_of_page_in_file = self.physical_page_location.offset_within_page * Config.PAGE_SIZE
+        with open(self.physical_page_location.filename, "r+b") as page_file: # This mode allows us to override the middle of files
+            start_of_page_in_file = self.physical_page_location.index_within_file * Config.PAGE_SIZE
             page_file.seek(start_of_page_in_file, 0)
             page_file.write(self.data)
             self.dirty = False

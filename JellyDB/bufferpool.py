@@ -33,7 +33,7 @@ class Bufferpool:
     :returns: PhysicalPageLocation   # the unique disk location of YOUR (you being a physical page) data
     """
     def allocate_page_id(self, table: str, __range: int) -> PhysicalPageLocation:
-        page = open(PhysicalPageLocation.filename_from(self.path_to_db_files, table, __range), 'ab+')
+        page = open(PhysicalPageLocation.filename_from(self.path_to_db_files, table, __range), 'a+b')
         number_of_pages_already_in_file = page.tell() // Config.PAGE_SIZE
         page.write(b"\x00" * Config.PAGE_SIZE) # Guarantees there is enough space to store on disk BEFORE we start performing transactions
         page.close()
@@ -52,6 +52,7 @@ class Bufferpool:
         buffered_page = self._get_page(physical_page_location, True)
         self.pin(buffered_page)
         PageUtils.write(buffered_page.data, value, index)
+        buffered_page.dirty = True
         self.unpin(physical_page_location)
     
     def read(self, physical_page_location: PhysicalPageLocation, offset_within_page: int) -> int:
