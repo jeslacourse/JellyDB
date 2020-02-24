@@ -76,8 +76,15 @@ class Table:
         for i in range(0, self._num_content_columns):
             self._indices.create_index(self.internal_id(i))
 
+    def reload_ephemeral_structures(self, indices, verbose=False):
+        if verbose: print("Reloading index for table {}".format(self._name))
+        self._indices = indices
+        if verbose: print("Reload ephemeral structures says here is _indices.data:\n", self._indices.data)
+
     def deallocate_ephemeral_structures(self):
         self._indices = None
+
+
     """
     # The users of our database only know about their data columns. Since we
     # have metadata columns at the beginning of our tables, we must shift any

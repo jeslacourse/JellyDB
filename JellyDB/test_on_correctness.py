@@ -11,15 +11,10 @@ import traceback
 def get_columns(record_object):
     return record_object[0].columns
 
-def correctness_testing():
+def correctness_testing(fav_numbers):
     print("\n====Correctness testing:====\n")
     tests_passed = 0
     tests_failed = 0
-
-    # Favorite numbers table
-    db = Database()
-    db.open("~/ECS165")
-    fav_numbers = db.create_table('fav_numbers', 3, 0)
 
     try:
         assert fav_numbers._name == "fav_numbers"
@@ -168,6 +163,60 @@ def correctness_testing():
         print("Tests failed:", tests_failed)
 
 
+def correctness_testing_after_close(fav_numbers):
+    print("\n====Correctness testing after close:====\n")
+    tests_passed = 0
+    tests_failed = 0
+
+    try:
+        assert fav_numbers._name == "fav_numbers"
+        assert fav_numbers._num_columns == 3 + Config.METADATA_COLUMN_COUNT
+        assert fav_numbers._key == 0
+
+        print("fav_numbers table attributes after closed passed")
+        tests_passed += 1
+
+    except Exception as exc:
+        print("fav_numbers table attributes after closed FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
+
+    query = Query(fav_numbers)
+
+    try:
+        # Try selecting 2 keys from above.
+        # Make sure each returns only 1 record and that record is correct.
+        # Note 25 was deleted in previous block
+        for testkey in [5, 99]:
+            # Get all columns
+            s = get_columns(query.select(testkey, 0, [1, 1, 1]))
+
+            # Make sure result is right length
+            # At this point select should return a record (not a list of records)
+            # So this is checking how many columns are in that record
+            assert len(s) == 3
+
+            # Make sure primary key matches
+            assert s[0] == testkey
+
+        print("\nfav_numbers primary key select after closed passed")
+        tests_passed += 1
+
+    except Exception as exc:
+        print("\nfav_numbers primary key select after closed FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
+
+
+
+    if tests_failed == 0:
+        print("\nAll {} tests passed!!! :)".format(str(tests_passed)))
+    else:
+        print("\nTests passed:", tests_passed)
+        print("Tests failed:", tests_failed)
+
+
 def performance_testing():
     print("\n====Performance testing:====\n")
 
@@ -233,6 +282,22 @@ def performance_testing():
     print("Deleting 10k records took:  \t\t\t", delete_time_1 - delete_time_0)
 
 if __name__ == "__main__":
-    correctness_testing()
+    # Create favorite numbers table + original correctness tests
+    db = Database()
+    db.open("~/ECS165")
+    fav_numbers = db.create_table('fav_numbers', 3, 0)
+
+    correctness_testing(fav_numbers)
+
+    # Close database
+    db.close()
+
+    # Reopen database and check data is still there
+    db.open("~/ECS165")
+    fav_numbers = db.get_table('fav_numbers')
+
+    correctness_testing_after_close(fav_numbers)
+
     # performance_testing()
+
     print("\n\n")
