@@ -18,6 +18,7 @@ def correctness_testing():
 
     # Favorite numbers table
     db = Database()
+    db.open("~/ECS165")
     fav_numbers = db.create_table('fav_numbers', 3, 0)
 
     try:
