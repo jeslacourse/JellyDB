@@ -66,13 +66,16 @@ class Table:
     """
     # Anything created in here is destroyed before we save our database to disk
     """
-    def allocate_ephemeral_structures(self):
-        print("allocating for {}".format(self._name))
+    def allocate_ephemeral_structures(self, verbose=False):
+        if verbose: print("Allocating index for table {}".format(self._name))
+
         # Index data structure contains all indexes for table
         self._indices = Indices()
-        # Setup index on primary key
-        self._indices.create_index(self.internal_id(self._key))
-    
+
+        # Setup index on all keys
+        for i in range(0, self._num_content_columns):
+            self._indices.create_index(self.internal_id(i))
+
     def deallocate_ephemeral_structures(self):
         self._indices = None
     """
@@ -139,7 +142,7 @@ class Table:
         self._page_ranges[record_location.range][record_location.page].write(record_with_metadata)
 
         # Create entry for this record in index(es)
-        for i in range(self._num_columns):
+        for i in range(self.internal_id(0), self.internal_id(self._num_content_columns)):
             if self._indices.has_index(i):
                 if verbose: print("table says column {} has index; now inserting in index".format(i))
                 self._indices.insert(i, record_with_metadata[i], RID)
@@ -178,52 +181,56 @@ class Table:
         # Get list of base RIDs for records with keyword in that column
         RIDs = self._indices.locate(self.internal_id(column), keyword)
 
-        # Indices class returns a list, but at this point we should only get 1 record
-        # Because we're only selecting on primary key
+        # Return None if no record exists for this key
         if RIDs is None:
             if verbose: print("Select function says: Indices.py returned None, returning None")
             return None
         if len(RIDs) == 0:
             if verbose: print("Select function says: Indices.py returned empty list, returning None")
             return None
-        if len(RIDs) == 1:
-            RID = RIDs[0]
-        else:
-            raise Exception("Someone inserted multiple records with the same key into the primary key index!")
+        # if len(RIDs) == 1:
+        #     RID = RIDs[0]
+        # else:
+        #     raise Exception("Someone inserted multiple records with the same key into the primary key index!")
 
-        # Get location of that base RID
-        target_loc = self.get_record_location(RID)
+        if verbose: print("Select function says: I found {} records matching keyword {} in column {}".format(len(RIDs), keyword, column))
+        results = []
 
-        # Find what logical page it lives on
-        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
+        for RID in RIDs:
+            # Get location of that base RID
+            target_loc = self.get_record_location(RID)
 
-        # Get the most updated logical page
-        # This will be a base page if no updates have happened yet
-        # Or will be a tail page if it has been updated
-        current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
-        self.assert_not_deleted(current_indirection)
+            # Find what logical page it lives on
+            logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
 
-        if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
-            latest_version_logical_page = logical_page_of_target
-            latest_version_offset = target_loc.offset
-        else:
-            latest_version_loc = self.get_record_location(current_indirection)
-            latest_version_offset = latest_version_loc.offset
-            latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+            # Get the most updated logical page
+            # This will be a base page if no updates have happened yet
+            # Or will be a tail page if it has been updated
+            current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
+            self.assert_not_deleted(current_indirection)
 
-        # Get record from most updated logical page
-        latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+            if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                latest_version_logical_page = logical_page_of_target
+                latest_version_offset = target_loc.offset
+            else:
+                latest_version_loc = self.get_record_location(current_indirection)
+                latest_version_offset = latest_version_loc.offset
+                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
 
-        record = latest_version_of_record[self.internal_id(0):]
-        if verbose: print("Select function says: here's the record I found:", record)
+            # Get record from most updated logical page
+            latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
 
-        if len(not_asked_columns) > 0:
-            for m in not_asked_columns:
-                record[m] = None
+            record = latest_version_of_record[self.internal_id(0):]
+            if verbose: print("Select function says: here's the record I found:", record)
 
-        fancy_record = Record(record)
+            if len(not_asked_columns) > 0:
+                for m in not_asked_columns:
+                    record[m] = None
 
-        return [fancy_record]
+            fancy_record = Record(record)
+            results.append(fancy_record)
+
+        return results
 
 
     def assert_not_deleted(self, value_of_indirection_column: int):
@@ -405,6 +412,6 @@ class Table:
             for j in range(len(page_rng)):
                 page = page_rng[j]
                 self._page_directory[page.base_RID] = (i,j)
-    
+
     def delete_all_files_owned_in(self, path_to_db_files: str):
         PhysicalPageLocation.delete_table_files(path_to_db_files, self._name, len(self._page_ranges))

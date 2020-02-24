@@ -43,15 +43,24 @@ class Indices:
     """
     # After this call, self.locate(column, value) should return a list containing RID.
     """
-    def insert(self, column: int, value: int, RID: int):
+    def insert(self, column: int, value: int, RID: int, verbose=False):
         if column not in self.data:
             raise Exception("No index exists for given column")
+
+        if verbose: print("Attempting to insert keyword {} from RID {} in index on column {}".format(value, RID, column))
+
         list_of_RIDs_for_this_value = self.data[column].get(value)
+
         if list_of_RIDs_for_this_value is None:
             self.data[column][value] = []
             list_of_RIDs_for_this_value = self.data[column][value]
+
         elif value in list_of_RIDs_for_this_value:
-            raise Exception("Value already exists")
+            # Commented out to not raise exception if value already exists in index.
+            # This was only relevant when index was only on primary key.
+            # raise Exception("Value already exists")
+            pass
+
         list_of_RIDs_for_this_value.append(RID)
     
     """
