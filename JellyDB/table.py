@@ -1,8 +1,8 @@
 from JellyDB.rid_allocator import RIDAllocator
 from JellyDB.indices import Indices
-from JellyDB.logical_page import LogicalPage
 from JellyDB.page import Page
 from JellyDB.config import Config
+from JellyDB.physical_page_location import PhysicalPageLocation
 from time import time_ns
 import numpy as np
 import threading
@@ -27,6 +27,8 @@ class Record:
 # Why not have a "PageRange" class? Because a "PageRange" is just data with no
 # functionality. We can use a list to represent it, and just use functions in
 # the Table class to manipulate them.
+#
+# You must call "open" before you use this class
 class Table:
 
     """
@@ -62,20 +64,35 @@ class Table:
         self._page_directory = {}
         self._recreate_page_directory()
 
-
-        # Index data structure contains all indexes for table
-        self._indices = Indices()
-
-        # Setup index on all keys
-        for i in range(0, num_content_columns):
-            self._indices.create_index(self.internal_id(i))
-
         # Attributes for merging
         self.current_tail_rid = 0
         self.current_base_rid = 0
         self.check_merge = []
         self.TPS = Config.START_TAIL_RID
         self.already_merged = False
+
+        self.allocate_ephemeral_structures()
+
+    """
+    # Anything created in here is destroyed before we save our database to disk
+    """
+    def allocate_ephemeral_structures(self, verbose=False):
+        if verbose: print("Allocating index for table {}".format(self._name))
+
+        # Index data structure contains all indexes for table
+        self._indices = Indices()
+
+        # Setup index on all keys
+        for i in range(0, self._num_content_columns):
+            self._indices.create_index(self.internal_id(i))
+
+    def reload_ephemeral_structures(self, indices, verbose=False):
+        if verbose: print("Reloading index for table {}".format(self._name))
+        self._indices = indices
+        if verbose: print("Reload ephemeral structures says here is _indices.data:\n", self._indices.data)
+
+    def deallocate_ephemeral_structures(self):
+        self._indices = None
 
 
     """
@@ -490,7 +507,9 @@ class Table:
         #print(records)
 
     def _add_page_range(self):
-        self._page_ranges.append(self._RID_allocator.make_page_range(self._num_columns))
+        self._page_ranges.append(
+            self._RID_allocator.make_page_range(self._name, len(self._page_ranges), self._num_columns)
+        )
         # keep track of the first tail RID in this new page range
         self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
         self._recreate_page_directory()
@@ -500,7 +519,7 @@ class Table:
     """
     def _add_tail_page(self, page_range: int):
         self._page_ranges[page_range].append(
-            self._RID_allocator.make_tail_page(self._num_columns)
+            self._RID_allocator.make_tail_page(self._name, page_range, self._num_columns)
         )
         self._recreate_page_directory()
 
@@ -539,3 +558,6 @@ class Table:
             for j in range(len(page_rng)):
                 page = page_rng[j]
                 self._page_directory[page.base_RID] = (i,j)
+
+    def delete_all_files_owned_in(self, path_to_db_files: str):
+        PhysicalPageLocation.delete_table_files(path_to_db_files, self._name, len(self._page_ranges))

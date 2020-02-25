@@ -102,7 +102,7 @@ class Indices:
         if column in self.data:
             raise Exception("Index already exists")
         
-        self.data[column] = {}
+        self.data[column] = {} # TODO spider through all pages (or existing indices!) to create index instead
 
     """
     # Drop index of specific column. Should raise Exception if index does not exist.
