@@ -139,16 +139,32 @@ class Table:
         current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
         self.assert_not_deleted(current_indirection)
 
-        if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
-            latest_version_logical_page = logical_page_of_target
-            latest_version_offset = target_loc.offset
-        else:
-            latest_version_loc = self.get_record_location(current_indirection)
-            latest_version_offset = latest_version_loc.offset
-            latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+        if self.TPS[target_loc.range] == None:#not merged yet
+            if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                latest_version_logical_page = logical_page_of_target
+                latest_version_offset = target_loc.offset
+            else:
+                latest_version_loc = self.get_record_location(current_indirection)
+                latest_version_offset = latest_version_loc.offset
+                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
 
+            # Get record from most updated logical page
+            record_with_metadata = latest_version_logical_page.read(latest_version_offset)
+
+        elif (current_indirection < self.TPS[target_loc.range]):#not merged yet
+            if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                latest_version_logical_page = logical_page_of_target
+                latest_version_offset = target_loc.offset
+            else:
+                latest_version_loc = self.get_record_location(current_indirection)
+                latest_version_offset = latest_version_loc.offset
+                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+
+            # Get record from most updated logical page
+            record_with_metadata = latest_version_logical_page.read(latest_version_offset)
+        elif current_indirection > self.TPS[target_loc.range] and current_indirection <= Config.START_TAIL_RID:#merged and not deleted
+            record_with_metadata = logical_page_of_target.read(target_loc.offset)
         # Get record from most updated logical page
-        record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
         # bitwise OR
         indirection_value_with_deletion_flag = \
@@ -302,7 +318,7 @@ class Table:
                 # Get record from most updated logical page
                 latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
 
-            else:#records already merged
+            elif current_indirection > self.TPS[target_loc.range] and current_indirection <= Config.START_TAIL_RID:#records already merged
                 latest_version_of_record = logical_page_of_target.read(target_loc.offset)
 
             record = latest_version_of_record[self.internal_id(0):]
@@ -373,7 +389,7 @@ class Table:
 
             # Get record from most updated logical page
             latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
-        else:
+        elif current_indirection > self.TPS[target_loc.range] and current_indirection <= Config.START_TAIL_RID:
             latest_version_of_record = logical_page_of_target.read(target_loc.offset)
 
         # Assign this tail record a RID
