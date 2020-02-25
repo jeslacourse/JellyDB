@@ -18,10 +18,15 @@ class Config:
     
     # Store the biggest bit of any data first
     INT_BYTE_ORDER = 'big'
-    NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE = 16
-    
+    # 1 is 512 records per page
+    NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE = 2
+
+    # When page range is full and ready for merging
+    TOTAL_RECORDS_FULL = MAX_RECORDS_PER_PAGE * NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE
+
     INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET = 0
 
     INDIRECTION_COLUMN_INDEX = 0
     TIMESTAMP_COLUMN_INDEX = 1
-    METADATA_COLUMN_COUNT = 2
+    BASE_RID_FOR_TAIL_PAGE_INDEX = 2
+    METADATA_COLUMN_COUNT = 3
