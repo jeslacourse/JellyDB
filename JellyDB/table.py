@@ -5,6 +5,9 @@ from JellyDB.page import Page
 from JellyDB.config import Config
 from time import time_ns
 import numpy as np
+import threading
+from time import process_time
+import time
 
 """
 # the page directory should map from RIDs to this
@@ -57,8 +60,8 @@ class Table:
         self.current_base_rid = 0
         self.check_merge = []
         self.TPS = Config.START_TAIL_RID
-        self.updating = False
-        self.tail_page_count = 0
+        self.already_merged = False
+        #self.merge_thread = None
 
 
     """
@@ -227,7 +230,7 @@ class Table:
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
     def update(self, key: int, columns: tuple):
-
+        print("i'm updating",process_time())
         # Get RID of record to update
         target_RIDs = self._indices.locate(self.internal_id(self._key), key)
         target_RID = target_RIDs[0]
@@ -288,9 +291,14 @@ class Table:
             print(self.current_tail_rid)
             print('tail page full')
             #print(self.current_tail_rid)
+            merge_thread = threading.Thread(target = self.__merge(current_update_loc.range, current_update_loc.page, self.current_tail_rid),name ='thread1')
+            merge_thread.start()
+            print("i'm still in main thread")
             print(current_update_loc.range)
             print(current_update_loc.page)
-            self.__merge(current_update_loc.range, current_update_loc.page, self.current_tail_rid)
+            merge_thread.join()
+            print("i'm still in main thread again")
+            #self.__merge(current_update_loc.range, current_update_loc.page, self.current_tail_rid)
             #print(self._page_ranges)
 
     """
@@ -350,12 +358,16 @@ class Table:
 
     #call merge function
     #__merge is used to check if merge should take place
-    def __merge(self, range, page, tail_rid):
+    def __merge(self, range_, page_, tail_rid_):
         #first check merge condition: currently start merge once tail page is full
         can_merge = False
-        #print(range)
+        #time.sleep(0.01)
+        #print('let me slow you down',process_time())
+        #aweqq = []
+        #for dasfas in range(0,1000000):
+            #aweqq.append(dasfas**2)
         try:
-            if self.check_merge[range][0] ==range:
+            if self.check_merge[range_][0] ==range_:
              #same base page range and tail page range are full
                 can_merge =True
         except IndexError:
@@ -363,29 +375,20 @@ class Table:
             print('base page range',range,'not full yet')
         #print(tail_rid)
         if can_merge:
-            self.merge(tail_rid, range, page)
-            #second check if base pages for merge is full
+            self.merge(tail_rid_, range_, page_)
 
 
     #actual merge function
     def merge(self,_tail_rid,_range,_page):
-        print('do merge')
+        print('do merge',process_time())
         #print(current_base_pages)
         base_rid_tobe_changed = []
         record_tobe_changed = {}
         merged_records = []
         print(_tail_rid)
         count = 0
-        '''
-        latest_version_loc = self.get_record_location(9223372036854775807)
-        latest_version_offset = latest_version_loc.offset
-        latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
-        latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
-        record = latest_version_of_record[self.internal_id(0):]
-        fancy_record = Record(record)
-        for i, column in enumerate(fancy_record.columns):
-            print(fancy_record)
-        '''
+        #time.sleep(0.1)
+
         for id in range(_tail_rid, _tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
             count +=1
             per_update_in_tail_page = self.get_record_location(id)
@@ -397,7 +400,7 @@ class Table:
         #print(count)
         #print(base_rid_tobe_changed)
         #print(record_tobe_changed)
-
+        print("i'm in process to merge",process_time())
         for baseid in range(Config.START_RID, Config.TOTAL_RECORDS_FULL+1):
             per_record_in_base_page = self.get_record_location(baseid)
             per_record_tobe_merge = self._page_ranges[per_record_in_base_page.range][per_record_in_base_page.page]
@@ -406,36 +409,38 @@ class Table:
                 merged_records.append(record_tobe_changed[baseid])
             else:
                 merged_records.append(current_base_record)
-        print('finish merge')
-        print(self.TPS)
-        self.TPS = _tail_rid
-        print(self.TPS)
+        print('finish merge',process_time())
+        #print(self.TPS)
+        #self.TPS = _tail_rid
+        #print(self.TPS)
         print(merged_records)
-        self._page_directory_reallocation(merged_records,_range)
-        self.tail_page_count = _page
-
-    #def get_current_metadata_column(self, record):
+        self.already_merged = True
+        self._page_directory_reallocation(merged_records,_range,_tail_rid)
 
 
-    def _page_directory_reallocation(self, records, __range):
-        self.updating = True
-        merge_count = 0
-        #self._add_merged_page(range)#change!need lock!
-        #self._page_ranges[page_range].append(LogicalPage.write_merged_record(self.column))
-        for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
-            PAGES = self._page_ranges[__range][n].pages#base pages will always remain as first several pages in the logical page range
-            for i in range(self.num_columns): #PAGES FOR MERGED BASE RECORDS, insert into the original Pages() (column store)
-                PAGES.insert(i+Config.METADATA_COLUMN_COUNT, Page())
-            for record in records[n*Config.MAX_RECORDS_PER_PAGE:(n+1)*Config.MAX_RECORDS_PER_PAGE]:
-                for k in range(len(record)):
-                    PAGES[k+Config.METADATA_COLUMN_COUNT].write(record[k], merge_count)
-                merge_count+=1
-            merge_count = 0
-            #self._page_ranges[range][basepage].pages = self._page_ranges[range][basepage].pages[:self._num_columns]#
-            #reading at logical pages always return first serveral columns, metadata + userdefined columns
-            #so merged columns inserted will be directly detected.
-        self._recreate_page_directory()
-        self.updating = False
+    def _page_directory_reallocation(self, records, __range,__tail__rid):
+        print('wait for me to finish',process_time())
+        if self.already_merged:
+            lock = threading.Lock()
+            lock.acquire()
+            for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
+                merge_count = 0
+                PAGES = self._page_ranges[__range][n].pages#base pages will always remain as first several pages in the logical page range
+                for i in range(self.num_columns): #PAGES FOR MERGED BASE RECORDS, insert into the original Pages() (column store)
+                    PAGES.insert(i+Config.METADATA_COLUMN_COUNT, Page())
+                for record in records[n*Config.MAX_RECORDS_PER_PAGE:(n+1)*Config.MAX_RECORDS_PER_PAGE]:
+                    for k in range(len(record)):
+                        PAGES[k+Config.METADATA_COLUMN_COUNT].write(record[k], merge_count)
+                    merge_count+=1
+                #reading at logical pages always return first serveral columns, metadata + userdefined columns
+                #so merged columns inserted will be directly detected.
+            self._recreate_page_directory()
+            self.already_merged = False
+            self.TPS = __tail__rid
+            print('i finished updating, you can go',process_time())
+            lock.release()
+        else:
+            print('nothing merged yet')
         #print(records)
 
     def _add_page_range(self):
