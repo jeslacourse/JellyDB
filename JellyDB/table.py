@@ -140,7 +140,7 @@ class Table:
         #check if the output is integer
         if (self.current_base_rid % Config.TOTAL_RECORDS_FULL) == 0:
             print('basepage full')
-            self.check_merge.append([record_location.range,record_location.page])#list of base pages ready to merge
+            self.check_merge.append([record_location.range,self.current_base_rid])#list of base pages ready to merge
             print(self.check_merge)
         #print(self._page_ranges)
 
@@ -230,7 +230,6 @@ class Table:
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
     def update(self, key: int, columns: tuple):
-        print("i'm updating",process_time())
         # Get RID of record to update
         target_RIDs = self._indices.locate(self.internal_id(self._key), key)
         target_RID = target_RIDs[0]
@@ -401,7 +400,7 @@ class Table:
         #print(base_rid_tobe_changed)
         #print(record_tobe_changed)
         print("i'm in process to merge",process_time())
-        for baseid in range(Config.START_RID, Config.TOTAL_RECORDS_FULL+1):
+        for baseid in range(self.check_merge[_range][-1]-Config.TOTAL_RECORDS_FULL+1, self.check_merge[_range][-1]+1):
             per_record_in_base_page = self.get_record_location(baseid)
             per_record_tobe_merge = self._page_ranges[per_record_in_base_page.range][per_record_in_base_page.page]
             current_base_record = per_record_tobe_merge.read(per_record_in_base_page.offset)[self.internal_id(0):]
