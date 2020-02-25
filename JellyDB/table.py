@@ -474,13 +474,13 @@ class Table:
                 # And then .columns gets items out of Record object
                 # ONLY SUPPORTS SELECTING ON PRIMARY KEY
                 summation.append(self.select(ids, self._key, columns_for_sum)[0].columns[aggregate_column_index])
-            # Sum function was breaking if not all RIDs in range had actual records
-            # In this case, Indices.py will throw KeyError
-            # Here we add 0 anytime we catch KeyError
-            except KeyError:
-                if verbose: print("Update says caught KeyError, appending 0")
+            # Indices.py will throw KeyError if not all RIDs in range had actual records
+            # Indices.py will return empty list for values that now have no associated RIDs after update or delete,
+            #   resulting in select returning None and a NoneType error
+            # Here we add 0 anytime we catch either of these errors
+            except (KeyError, TypeError) as exc:
+                if verbose: print("Update says caught {}, appending 0".format(type(exc).__name__))
                 summation.append(0)
-
 
         return sum(summation)
 
