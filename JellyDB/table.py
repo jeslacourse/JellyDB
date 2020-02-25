@@ -477,10 +477,10 @@ class Table:
             # Indices.py will throw KeyError if not all RIDs in range had actual records
             # Indices.py will return empty list for values that now have no associated RIDs after update or delete,
             #   resulting in select returning None and a NoneType error
-            # Here we add 0 anytime we catch either of these errors
+            # Here we skip anytime we catch either of these errors
             except (KeyError, TypeError) as exc:
-                if verbose: print("Update says caught {}, appending 0".format(type(exc).__name__))
-                summation.append(0)
+                if verbose: print("Update says caught {}, skipping".format(type(exc).__name__))
+                continue
 
         return sum(summation)
 
