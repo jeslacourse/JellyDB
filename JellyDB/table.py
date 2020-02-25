@@ -416,7 +416,7 @@ class Table:
 
     # Call merge function
     # __merge is used to check if merge should take place
-    def __merge(self, range_, page_, tail_rid_):
+    def __merge(self, range_, page_, tail_rid_, verbose=False):
         # First check merge condition: currently start merge once tail page is full
         can_merge = False
         #time.sleep(0.01)
@@ -428,7 +428,7 @@ class Table:
                 can_merge =True
         except IndexError:
             can_merge = False
-            print('base page range',range,'not full yet')
+            if verbose: print('base page range',range,'not full yet')
         #print(tail_rid)
         if can_merge:
             self.merge(tail_rid_, range_, page_)
