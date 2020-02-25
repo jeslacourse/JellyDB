@@ -118,26 +118,62 @@ class Table:
     # delete the record in self.table which has the value `key` in the column used for its primary key
     :param key: int # the primary key value of the record we are deleting
     """
-    def delete(self, key: int):
+    def delete(self, key: int, verbose=False):
+        if verbose: print("Table delete says: attempting to delete primary key {}".format(key))
+
         if not self._indices.contains(self.internal_id(self._key), key):
             raise Exception("Primary key {} does not correspond to any record".format(str(key)))
-        RID = self._indices.locate(self.internal_id(self._key), key)[0]
-        record_loc = self.get_record_location(RID)
-        record_with_metadata = \
-            self._page_ranges[record_loc.range][record_loc.page].read(record_loc.offset)
+
+        # Get RID of record to delete
+        target_RID = self._indices.locate(self.internal_id(self._key), key)[0]
+        target_loc = self.get_record_location(target_RID)
+
+        # Find which logical page record lives on
+        target_loc = self.get_record_location(target_RID)
+        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
+
+        # Get the most updated logical page
+        # This will be a base page if no updates have happened yet
+        # Or will be a tail page if it has been updated
+        current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
+        self.assert_not_deleted(current_indirection)
+
+        if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+            latest_version_logical_page = logical_page_of_target
+            latest_version_offset = target_loc.offset
+        else:
+            latest_version_loc = self.get_record_location(current_indirection)
+            latest_version_offset = latest_version_loc.offset
+            latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+
+        # Get record from most updated logical page
+        record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
         # bitwise OR
         indirection_value_with_deletion_flag = \
             record_with_metadata[Config.INDIRECTION_COLUMN_INDEX] | Config.RECORD_DELETION_MASK
 
         # flag as deleted
-        self._page_ranges[record_loc.range][record_loc.page] \
-            .update_indirection_column(record_loc.offset, indirection_value_with_deletion_flag)
+        self._page_ranges[target_loc.range][target_loc.page] \
+            .update_indirection_column(target_loc.offset, indirection_value_with_deletion_flag)
 
         # delete all values from the index
+
+        if verbose:
+            print("Table delete says attempting to delete from index")
+            print("Table delete says: record_with_metadata =", record_with_metadata)
+
+            for i in range(self._num_columns):
+                if self._indices.has_index(i):
+                    print("Table delete says column {} has index".format(i))
+                else:
+                    print("Table delete says column {} does not have index".format(i))
+
+            print("Table delete says here is self._indices.data.keys()", self._indices.data.keys())
+
         for i in range(self._num_columns):
             if self._indices.has_index(i):
-                self._indices.delete(i, record_with_metadata[i], RID)
+                self._indices.delete(i, record_with_metadata[i], target_RID)
 
 
     """

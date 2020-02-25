@@ -208,7 +208,23 @@ def correctness_testing_after_close(fav_numbers):
         print(traceback.format_exc())
         tests_failed += 1
 
+    try:
+        query.delete(99)
+        print("\nfav_numbers delete after closed passed")
+        tests_passed += 1
+    except:
+        print("\nfav_numbers delete after closed FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
 
+    try:
+        query.delete(5)
+        print("\nfav_numbers delete updated record after closed passed")
+        tests_passed += 1
+    except:
+        print("\nfav_numbers delete updated record after closed FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
 
     if tests_failed == 0:
         print("\nAll {} tests passed!!! :)".format(str(tests_passed)))
