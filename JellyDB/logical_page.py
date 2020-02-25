@@ -13,6 +13,8 @@ class LogicalPage:
         self.num_columns = num_columns
         self.base_RID = base_RID
         self.bound_RID = bound_RID
+        self.tablename = table
+        self.bufferpool_= bufferpool
 
         # Create new array of Page objects, one per col
         self.pages = []
@@ -66,6 +68,11 @@ class LogicalPage:
         self.record_count += 1
         return self.base_RID + self.record_count
 
+    def merge_write(self, pages_, columns, range__):
+        PAGES = pages_
+        for i in range(columns): #PAGES FOR MERGED BASE RECORDS, insert into the original Pages() (column store)
+            PAGES.insert(i+Config.METADATA_COLUMN_COUNT, Page(self.tablename, range__, self.bufferpool_))
+        PAGES = PAGES[:(columns+Config.METADATA_COLUMN_COUNT)]
     """
     # Indirection column is the only in-place update that happens in L-store.
     """

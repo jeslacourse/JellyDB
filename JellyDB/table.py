@@ -69,6 +69,7 @@ class Table:
         self.current_base_rid = 0
         self.check_merge = []
         self.TPS = Config.START_TAIL_RID
+        self.TPS = [None]
         self.already_merged = False
 
         self.allocate_ephemeral_structures()
@@ -170,6 +171,10 @@ class Table:
         # Track current base RID
         self.current_base_rid = RID
 
+        #initializing new tps when there's a new page range
+        if (self.current_base_rid % Config.MAX_RECORDS_PER_PAGE) == 0:
+            self.TPS.append(None)
+
         # Check if the output is integer
         if (self.current_base_rid % Config.TOTAL_RECORDS_FULL) == 0:
             if verbose: print("Table insert says: Base page full")
@@ -237,16 +242,30 @@ class Table:
             current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
             self.assert_not_deleted(current_indirection)
 
-            if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
-                latest_version_logical_page = logical_page_of_target
-                latest_version_offset = target_loc.offset
-            else:
-                latest_version_loc = self.get_record_location(current_indirection)
-                latest_version_offset = latest_version_loc.offset
-                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+            if self.TPS[target_loc.range] == None:#not merged yet
+                if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                    latest_version_logical_page = logical_page_of_target
+                    latest_version_offset = target_loc.offset
+                else:
+                    latest_version_loc = self.get_record_location(current_indirection)
+                    latest_version_offset = latest_version_loc.offset
+                    latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
 
-            # Get record from most updated logical page
-            latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+                # Get record from most updated logical page
+                latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+            elif (current_indirection < self.TPS[target_loc.range]):#not merged yet
+                if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                    latest_version_logical_page = logical_page_of_target
+                    latest_version_offset = target_loc.offset
+                else:
+                    latest_version_loc = self.get_record_location(current_indirection)
+                    latest_version_offset = latest_version_loc.offset
+                    latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+
+                # Get record from most updated logical page
+                latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+            else:#records already merged
+                latest_version_of_record = logical_page_of_target.read(target_loc.offset)
 
             record = latest_version_of_record[self.internal_id(0):]
             if verbose: print("Select function says: here's the record I found:", record)
@@ -293,17 +312,30 @@ class Table:
         # Or will be a tail page if it has been updated
         current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
         self.assert_not_deleted(current_indirection)
+        if self.TPS[target_loc.range] == None:#not merged yet
+            if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                latest_version_logical_page = logical_page_of_target
+                latest_version_offset = target_loc.offset
+            else:
+                latest_version_loc = self.get_record_location(current_indirection)
+                latest_version_offset = latest_version_loc.offset
+                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
 
-        if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
-            latest_version_logical_page = logical_page_of_target
-            latest_version_offset = target_loc.offset
+            # Get record from most updated logical page
+            latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+        elif (current_indirection < self.TPS[target_loc.range]):#not merged yet
+            if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                latest_version_logical_page = logical_page_of_target
+                latest_version_offset = target_loc.offset
+            else:
+                latest_version_loc = self.get_record_location(current_indirection)
+                latest_version_offset = latest_version_loc.offset
+                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+
+            # Get record from most updated logical page
+            latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
         else:
-            latest_version_loc = self.get_record_location(current_indirection)
-            latest_version_offset = latest_version_loc.offset
-            latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
-
-        # Get record from most updated logical page
-        latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+            latest_version_of_record = logical_page_of_target.read(target_loc.offset)
 
         # Assign this tail record a RID
         tail_RID_of_current_update = self.allocate_next_available_tail_RID(target_loc.range)
@@ -339,7 +371,6 @@ class Table:
         if ((Config.START_TAIL_RID-self.current_tail_rid) % Config.MAX_RECORDS_PER_PAGE) == 0:
             if verbose:
                 print(self.current_tail_rid)
-                print('tail page full')
 
             merge_thread = threading.Thread(target = self.__merge(current_update_loc.range, current_update_loc.page, self.current_tail_rid),name ='thread1')
             merge_thread.start()
@@ -423,12 +454,13 @@ class Table:
         #print('let me slow you down',process_time())
 
         try:
-            if self.check_merge[range_][0] ==range_:
+            if self.check_merge[range_][0] == range_:
              # Same base page range and tail page range are full
                 can_merge =True
         except IndexError:
             can_merge = False
             print('base page range',range,'not full yet')
+            #print('base page range',range_,'not full yet')
         #print(tail_rid)
         if can_merge:
             self.merge(tail_rid_, range_, page_)
@@ -436,8 +468,6 @@ class Table:
 
     # Actual merge function
     def merge(self,_tail_rid,_range,_page, verbose=True):
-        if verbose:
-            print('do merge',process_time())
             #print(current_base_pages)
         base_rid_tobe_changed = []
         record_tobe_changed = {}
@@ -469,8 +499,6 @@ class Table:
                 merged_records.append(record_tobe_changed[baseid])
             else:
                 merged_records.append(current_base_record)
-        if verbose:
-            print('finish merge',process_time())
             #print(self.TPS)
             #self.TPS = _tail_rid
             #print(self.TPS)
@@ -489,18 +517,23 @@ class Table:
             for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
                 merge_count = 0
                 PAGES = self._page_ranges[__range][n].pages#base pages will always remain as first several pages in the logical page range
-                for i in range(self.num_columns): #PAGES FOR MERGED BASE RECORDS, insert into the original Pages() (column store)
-                    PAGES.insert(i+Config.METADATA_COLUMN_COUNT, Page())
+                PAGES_ = self._page_ranges[__range][n].pages#base pages will always remain as first several pages in the logical page range
+                modifying_pages = self._page_ranges[__range][n].merge_write(PAGES_,self.num_columns, __range)
+                #for i in range(self.num_columns): #PAGES FOR MERGED BASE RECORDS, insert into the original Pages() (column store)
+                    #PAGES.insert(i+Config.METADATA_COLUMN_COUNT, Page(self._name,__range, bufferpool: Bufferpool))
+                PAGES_ = self._page_ranges[__range][n].pages
                 for record in records[n*Config.MAX_RECORDS_PER_PAGE:(n+1)*Config.MAX_RECORDS_PER_PAGE]:
                     for k in range(len(record)):
-                        PAGES[k+Config.METADATA_COLUMN_COUNT].write(record[k], merge_count)
+                        PAGES_[k+Config.METADATA_COLUMN_COUNT].write(record[k], merge_count)
                     merge_count+=1
                 #reading at logical pages always return first serveral columns, metadata + userdefined columns
                 #so merged columns inserted will be directly detected.
             self._recreate_page_directory()
             self.already_merged = False
-            self.TPS = __tail__rid
-            if verbose: print('i finished updating, you can go',process_time())
+
+            self.TPS[__range] = __tail__rid-Config.MAX_RECORDS_PER_PAGE+1
+
+            print('i finished updating, you can go',process_time())
             lock.release()
         else:
             if verbose: print('nothing merged yet')
