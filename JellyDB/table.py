@@ -68,7 +68,6 @@ class Table:
         self.current_tail_rid = 0
         self.current_base_rid = 0
         self.check_merge = []
-        self.TPS = Config.START_TAIL_RID
         self.TPS = [None]
         self.already_merged = False
 
@@ -223,14 +222,15 @@ class Table:
         # Track current base RID
         self.current_base_rid = RID
 
-        # Initializing new TPS when there's a new page range
-        if (self.current_base_rid % Config.MAX_RECORDS_PER_PAGE) == 0:
-            self.TPS.append(None)
+        #if (self.current_base_rid % Config.MAX_RECORDS_PER_PAGE) == 0:
+            #self.TPS.append(None)
 
         # Check if the output is integer
         if (self.current_base_rid % Config.TOTAL_RECORDS_FULL) == 0:
             if verbose: print("Table insert says: Base page full")
             # List of base pages ready to merge
+            # Initializing new TPS when there's a new page range
+            self.TPS.append(None)
             self.check_merge.append([record_location.range,self.current_base_rid])
             if verbose: print("Table insert says: Here is self.check_merge:", self.check_merge)
 
