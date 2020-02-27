@@ -86,6 +86,8 @@ class Table:
         for i in range(0, self._num_content_columns):
             self._indices.create_index(self.internal_id(i))
 
+        self.lock = threading.Lock()
+
     def reload_ephemeral_structures(self, indices, verbose=False):
         if verbose: print("Reloading index for table {}".format(self._name))
         self._indices = indices
@@ -93,6 +95,7 @@ class Table:
 
     def deallocate_ephemeral_structures(self):
         self._indices = None
+        self.lock = None
 
 
     """
@@ -566,8 +569,8 @@ class Table:
             print('wait for me to finish',process_time())
 
         if self.already_merged:
-            lock = threading.Lock()
-            lock.acquire()
+            self.lock = threading.Lock()
+            self.lock.acquire()
             for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
                 merge_count = 0
                 PAGES = self._page_ranges[__range][n].pages#base pages will always remain as first several pages in the logical page range
@@ -588,7 +591,7 @@ class Table:
             self.TPS[__range] = __tail__rid-Config.MAX_RECORDS_PER_PAGE+1
 
             if verbose: print('Table page directory reallocation says: I finished updating, you can go', process_time())
-            lock.release()
+            self.lock.release()
         else:
             if verbose: print('nothing merged yet')
         #print(records)
