@@ -69,6 +69,8 @@ class LogicalPage:
         return self.base_RID + self.record_count
 
     def merge_write(self, pages_, columns, range__):
+        '''this line decide whether to discard the old records, if want to keep old records
+        delete this line 74'''
         pages_ = pages_[:Config.METADATA_COLUMN_COUNT]
         for i in range(columns): #PAGES FOR MERGED BASE RECORDS, insert into the original Pages() (column store)
             #pages_.insert(i+Config.METADATA_COLUMN_COUNT, Page(self.tablename, range__, self.bufferpool_))

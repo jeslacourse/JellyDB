@@ -71,7 +71,6 @@ class Table:
         self.check_merge = []
         self.TPS = [None]
         self.merge_queue = collections.deque()
-        #self.lock = threading.RLock()
         self.allocate_ephemeral_structures()
 
     """
@@ -92,8 +91,6 @@ class Table:
         # Setup index on all keys
         for i in range(0, self._num_content_columns):
             self._indices.create_index(self.internal_id(i))
-
-        #self.lock = threading.Lock()
 
     def reload_ephemeral_structures(self, indices, verbose=False):
         if verbose: print("Reloading index for table {}".format(self._name))
@@ -243,6 +240,27 @@ class Table:
             self.check_merge.append([record_location.range,self.current_base_rid])
             print(self.check_merge)
             if verbose: print("Table insert says: Here is self.check_merge:", self.check_merge)
+
+        #make sure left-over queues can be processed
+        if self.merge_queue:
+            #not empty
+            if threading.activeCount() == 1:
+                try:
+                    if self.merge_queue[-1][0] == self.check_merge[self.merge_queue[-1][0]][0]:
+                     # Same base page range and tail page range are full
+                        merge_thread = threading.Thread(target = self.merge, args =(self.merge_queue.pop(),), name ='merge_thread')
+                        merge_thread.start()
+                except IndexError:
+                    pass
+
+                if verbose:
+                    print("i'm still in main thread", threading.current_thread().name)
+            else:
+                #another thread was running
+                pass
+        else:
+            #empty
+            pass
 
     def _allocate_first_available_base_RID(self):
         # Add new page range if necessary
@@ -438,20 +456,10 @@ class Table:
             if verbose:
                 print(self.current_tail_rid)
             self.merge_queue.appendleft([current_update_loc.range,current_update_loc.page,self.current_tail_rid])
-            #print(self.merge_queue.qsize())
-            #self.__merge(current_update_loc.range, current_update_loc.page, self.current_tail_rid)
-            #print(self._page_ranges)
+
         if self.merge_queue:
             #not empty
             if threading.activeCount() == 1:
-                #print(threading.enumerate())
-                #print(self.merge_queue.get())
-                #queue_used = self.merge_queue.get()
-                #print(self.merge_queue.qsize())
-                #time.sleep(0.01)
-                #print('let me slow you down',process_time())
-                #q = self.merge_queue.queue
-                #print(q[0])
                 try:
                     if self.merge_queue[-1][0] == self.check_merge[self.merge_queue[-1][0]][0]:
                      # Same base page range and tail page range are full
@@ -565,10 +573,6 @@ class Table:
                 merged_records.append(record_tobe_changed[baseid])
             else:
                 merged_records.append(current_base_record)
-            #print(self.TPS)
-            #self.TPS = _tail_rid
-            #print(self.TPS)
-            #if verbose: print(merged_records)
         self._page_directory_reallocation(merged_records,_range,_tail_rid)
 
 
@@ -580,23 +584,17 @@ class Table:
         with lock:
             for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
                 self.merge_count = 0
-                #PAGES_ = self._page_ranges[__range][n].pages#base pages will always remain as first several pages in the logical page range
+                #base pages will always remain as first several pages in the logical page range
                 if verbose: print(len(self._page_ranges[__range][n].pages), threading.current_thread().name)
                 self._page_ranges[__range][n].merge_write(self._page_ranges[__range][n].pages,self.num_columns, __range)
-                #for i in range(self.num_columns): #PAGES FOR MERGED BASE RECORDS, insert into the original Pages() (column store)
-                    #PAGES.insert(i+Config.METADATA_COLUMN_COUNT, Page(self._name,__range, bufferpool: Bufferpool))
-                #PAGES_ = self._page_ranges[__range][n].pages
                 if verbose: print(len(self._page_ranges[__range][n].pages))
                 for record in records[n*Config.MAX_RECORDS_PER_PAGE:(n+1)*Config.MAX_RECORDS_PER_PAGE]:
                     for k in range(len(record)):
 
                         self._page_ranges[__range][n].pages[k+Config.METADATA_COLUMN_COUNT].write(record[k], self.merge_count)
                     self.merge_count+=1
-                    #print(self.merge_count)
                 #reading at logical pages always return first serveral columns, metadata + userdefined columns
                 #so merged columns inserted will be directly detected.
-            #self._recreate_page_directory()
-
             self.TPS[__range] = __tail__rid-Config.MAX_RECORDS_PER_PAGE+1
 
         if verbose: print('Table page directory reallocation says: I finished updating, you can go', process_time())
