@@ -72,7 +72,7 @@ class Table:
         self.TPS = [None]
         self.already_merged = False
         self.merge_queue = queue.Queue()
-        self.lock = threading.RLock()
+        #self.lock = threading.RLock()
         self.allocate_ephemeral_structures()
 
     """
@@ -88,7 +88,7 @@ class Table:
         for i in range(0, self._num_content_columns):
             self._indices.create_index(self.internal_id(i))
 
-        #self.lock = threading.Lock()
+        self.lock = threading.Lock()
 
     def reload_ephemeral_structures(self, indices, verbose=False):
         if verbose: print("Reloading index for table {}".format(self._name))
@@ -445,8 +445,19 @@ class Table:
                 #print(threading.enumerate())
                 #print(self.merge_queue.get())
                 #queue_used = self.merge_queue.get()
-                merge_thread = threading.Thread(target = self.__merge, args =(self.merge_queue.get(),), name ='merge_thread')
-                merge_thread.start()
+                #print(self.merge_queue.qsize())
+                #time.sleep(0.01)
+                #print('let me slow you down',process_time())
+                q = self.merge_queue.queue
+                #print(q[0])
+                try:
+                    if q[0][0] == self.check_merge[q[0][0]][0]:
+                     # Same base page range and tail page range are full
+                        merge_thread = threading.Thread(target = self.merge, args =(self.merge_queue.get(),), name ='merge_thread')
+                        merge_thread.start()
+                except IndexError:
+                    pass
+
                 if verbose:
                     print("i'm still in main thread", threading.current_thread().name)
             else:
@@ -531,7 +542,7 @@ class Table:
                 can_merge =True
         except IndexError:
             can_merge = False
-            pass
+            #self.merge_queue.put([range_,page_,tail_rid_])
             if verbose: print('base page range',range,'not full yet')
         #print(tail_rid)
         if can_merge:
@@ -539,7 +550,10 @@ class Table:
 
 
     # Actual merge function
-    def merge(self,_tail_rid,_range,_page, verbose=False):
+    def merge(self, tail_page_to_work_on, verbose=False):
+        _range = tail_page_to_work_on[0]
+        _page = tail_page_to_work_on[1]
+        _tail_rid = tail_page_to_work_on[2]
             #print(current_base_pages)
         base_rid_tobe_changed = []
         record_tobe_changed = {}
@@ -562,7 +576,7 @@ class Table:
             #print(base_rid_tobe_changed)
             #print(record_tobe_changed)
             print("i'm in process to merge",process_time())
-
+        #print(self.check_merge[_range])
         for baseid in range(self.check_merge[_range][-1]-Config.TOTAL_RECORDS_FULL+1, self.check_merge[_range][-1]+1):
             base_record_location = self.get_record_location(baseid)
             per_record_tobe_merge = self._page_ranges[base_record_location.range][base_record_location.page]
