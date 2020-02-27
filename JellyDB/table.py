@@ -532,12 +532,12 @@ class Table:
 
         for id in range(_tail_rid, _tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
             count +=1
-            per_update_in_tail_page = self.get_record_location(id)
-            current_tail_page = self._page_ranges[per_update_in_tail_page.range][per_update_in_tail_page.page]
-            base_rid_unique = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, per_update_in_tail_page.offset)
+            tail_record_location = self.get_record_location(id)
+            current_tail_page = self._page_ranges[tail_record_location.range][tail_record_location.page]
+            base_rid_unique = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
             if base_rid_unique not in base_rid_tobe_changed:
                 base_rid_tobe_changed.append(base_rid_unique)
-                record_tobe_changed[base_rid_unique]=current_tail_page.read(per_update_in_tail_page.offset)[self.internal_id(0):]
+                record_tobe_changed[base_rid_unique]=current_tail_page.read(tail_record_location.offset)[self.internal_id(0):]
 
         if verbose:
             #print(count)
@@ -546,9 +546,9 @@ class Table:
             print("i'm in process to merge",process_time())
 
         for baseid in range(self.check_merge[_range][-1]-Config.TOTAL_RECORDS_FULL+1, self.check_merge[_range][-1]+1):
-            per_record_in_base_page = self.get_record_location(baseid)
-            per_record_tobe_merge = self._page_ranges[per_record_in_base_page.range][per_record_in_base_page.page]
-            current_base_record = per_record_tobe_merge.read(per_record_in_base_page.offset)[self.internal_id(0):]
+            base_record_location = self.get_record_location(baseid)
+            per_record_tobe_merge = self._page_ranges[base_record_location.range][base_record_location.page]
+            current_base_record = per_record_tobe_merge.read(base_record_location.offset)[self.internal_id(0):]
             if baseid in base_rid_tobe_changed:
                 merged_records.append(record_tobe_changed[baseid])
             else:
