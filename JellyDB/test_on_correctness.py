@@ -75,11 +75,16 @@ def correctness_testing(fav_numbers):
 
 
     except Exception as exc:
-        print("\nfav_numbers update + prikary key select FAILED")
+        print("\nfav_numbers update + primary key select FAILED")
         print(traceback.format_exc())
         tests_failed += 1
 
     try:
+        print("correctness testing says attempting to index content column 1")
+        query.table.create_index(1)
+        print("correctness testing says attempting to index content column 2")
+        query.table.create_index(2)
+
         # Try selecting record with 26 in column 1 (non-primary key)
         s = get_columns(query.select(26, 1, [1, 1, 1]))
         assert s == [25, 26, 27]

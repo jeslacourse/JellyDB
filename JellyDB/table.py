@@ -88,9 +88,8 @@ class Table:
         # Index data structure contains all indexes for table
         self._indices = Indices()
 
-        # Setup index on all keys
-        for i in range(0, self._num_content_columns):
-            self._indices.create_index(self.internal_id(i))
+        # Setup index on primary key only
+        self._indices.create_index(self.internal_id(self._key))
 
     def reload_ephemeral_structures(self, indices, verbose=False):
         if verbose: print("Reloading index for table {}".format(self._name))
@@ -119,6 +118,71 @@ class Table:
     """
     def external_id(self, column: int):
         return column - Config.METADATA_COLUMN_COUNT
+
+    def create_index(self, column_to_index, verbose=False):
+        # Add index to indices class
+        self._indices.create_index(self.internal_id(column_to_index))
+        # Now populate index
+
+        # Loop through page ranges
+        for range_no, page_range in enumerate(self._page_ranges):
+            if verbose: print("Here is a page_range:", page_range)
+
+            # Loop through base pages in page range
+            for logical_base_page in page_range[0:Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE]:
+                if verbose: print("Here is a logical base page:", logical_base_page)
+                if verbose: print("Here is the base RID", logical_base_page.base_RID)
+                if verbose: print("Here is the bound RID", logical_base_page.bound_RID)
+
+                # Loop through records in base page
+                for offset in range(0, Config.MAX_RECORDS_PER_PAGE):
+                    record = logical_base_page.read(offset)
+
+                    # Skip records that are empty
+                    if record == [0] * self._num_columns:
+                        continue
+
+                    if verbose: print("\nHere is a record with:", record, \
+                    "\trid = ", logical_base_page.base_RID + offset,\
+                    "\tindirection = ", record[Config.INDIRECTION_COLUMN_INDEX])
+
+                    current_indirection = record[Config.INDIRECTION_COLUMN_INDEX]
+
+                    if current_indirection >= Config.RECORD_DELETION_MASK:
+                        if verbose: print("Nope that's deleted")
+                        continue
+
+
+                    # Base page is already merged, no need to look at tail page
+                    if self.TPS[range_no] is not None \
+                        and current_indirection > self.TPS[range_no] \
+                        and current_indirection <= Config.START_TAIL_RID:
+                        record_with_metadata = logical_page_of_target.read(target_loc.offset)
+                        if verbose: print("no that record wasn't updated")
+
+                    # Base page is not merged
+                    else:
+                        if verbose: print("This record might have been updated")
+
+                        # Base record has not been updated
+                        if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                            latest_version_logical_page = logical_base_page
+                            latest_version_offset = offset
+
+                        # Record has been updated, get location of tail record
+                        else:
+                            tail_record_loc = self.get_record_location(current_indirection)
+                            latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
+                            latest_version_offset = tail_record_loc.offset
+
+                        record_with_metadata = latest_version_logical_page.read(latest_version_offset)
+                        if verbose: print("Here is the latest version:", record_with_metadata)
+
+                    # Insert into index
+                    i = self.internal_id(column_to_index)
+                    RID = logical_base_page.base_RID + offset
+                    self._indices.insert(i, record_with_metadata[i], RID)
+
 
     """
     # delete the record in self.table which has the value `key` in the column used for its primary key
