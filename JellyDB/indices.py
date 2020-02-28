@@ -39,7 +39,7 @@ class Indices:
         if column not in self.data:
             raise Exception("No index exists for column {}".format(str(column)))
         return self.data[column].get(value) is not None
-    
+
     """
     # After this call, self.locate(column, value) should return a list containing RID.
     """
@@ -62,7 +62,7 @@ class Indices:
             pass
 
         list_of_RIDs_for_this_value.append(RID)
-    
+
     """
     # After this call, self.locate(column, value) should return a list that does not contain RID.
     """
@@ -99,10 +99,10 @@ class Indices:
     # Create index on specific column. Should raise Exception if index already exists.
     """
     def create_index(self, column: int):
-        if column in self.data:
+        if column in self.data and self.data[column] is not None:
             raise Exception("Index already exists")
-        
-        self.data[column] = {} # TODO spider through all pages (or existing indices!) to create index instead
+
+        self.data[column] = {}
 
     """
     # Drop index of specific column. Should raise Exception if index does not exist.

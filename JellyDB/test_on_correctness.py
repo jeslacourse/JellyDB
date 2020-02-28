@@ -80,9 +80,7 @@ def correctness_testing(fav_numbers):
         tests_failed += 1
 
     try:
-        print("correctness testing says attempting to index content column 1")
         query.table.create_index(1)
-        print("correctness testing says attempting to index content column 2")
         query.table.create_index(2)
 
         # Try selecting record with 26 in column 1 (non-primary key)
@@ -106,9 +104,24 @@ def correctness_testing(fav_numbers):
         print(traceback.format_exc())
         tests_failed += 1
 
-    # print("\nTable dump:")
-    # for r in query.table.record_list:
-    #     print(r.columns)
+    try:
+        # Drop indexes and assert they become None
+        query.table.drop_index(1)
+        query.table.drop_index(2)
+        assert query.table._indices.data[4] == None
+        assert query.table._indices.data[5] == None
+
+        # Create indexes again to not break later tests
+        query.table.create_index(1)
+        query.table.create_index(2)
+
+        print("\nfav_numbers drop_index passed")
+        tests_passed += 1
+
+    except Exception as exc:
+        print("\nfav_numbers drop_index FAILED")
+        print(traceback.format_exc())
+        tests_failed += 1
 
     try:
         s = get_columns(query.select(5, 0, [1, 0, 0]))

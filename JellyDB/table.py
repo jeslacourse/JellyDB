@@ -114,6 +114,9 @@ class Table:
     def external_id(self, column: int):
         return column - Config.METADATA_COLUMN_COUNT
 
+    """
+    Add index to a non-primary key column.
+    """
     def create_index(self, column_to_index, verbose=False):
         # Add index to indices class
         self._indices.create_index(self.internal_id(column_to_index))
@@ -166,6 +169,12 @@ class Table:
                     RID = logical_base_page.base_RID + offset
                     self._indices.insert(i, record_with_metadata[i], RID)
 
+
+    """
+    Remove index on a column.
+    """
+    def drop_index(self, column_to_drop):
+        self._indices.drop_index(self.internal_id(column_to_drop))
 
     """
     # delete the record in self.table which has the value `key` in the column used for its primary key
