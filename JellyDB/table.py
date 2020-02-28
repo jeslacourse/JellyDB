@@ -76,11 +76,6 @@ class Table:
     """
     # Anything created in here is destroyed before we save our database to disk
     """
-    '''this avoid pickling error when db tries to dump threading.Lock()'''
-    #def __reduce__(self):
-        #return(self.__class__, (self._name, self._indices,self.merge_queue, self._key,self.TPS,self.check_merge, \
-        ##self.current_base_rid, self.current_tail_rid, self._page_directory, self._page_ranges,self._next_tail_RID_to_allocate, \
-        #self._RID_allocator, self._key_column_boolean_array,self._num_columns, self.num_columns,self._num_content_columns ))
 
     def allocate_ephemeral_structures(self, verbose=False):
         if verbose: print("Allocating index for table {}".format(self._name))
@@ -280,9 +275,6 @@ class Table:
         # Track current base RID
         self.current_base_rid = RID
 
-        #if (self.current_base_rid % Config.MAX_RECORDS_PER_PAGE) == 0:
-            #self.TPS.append(None)
-
         # Check if the output is integer
         if (self.current_base_rid % Config.TOTAL_RECORDS_FULL) == 0:
             if verbose: print("Table insert says: Base page full")
@@ -335,10 +327,6 @@ class Table:
         if len(RIDs) == 0:
             if verbose: print("Select function says: Indices.py returned empty list, returning None")
             return None
-        # if len(RIDs) == 1:
-        #     RID = RIDs[0]
-        # else:
-        #     raise Exception("Someone inserted multiple records with the same key into the primary key index!")
 
         if verbose: print("Select function says: I found {} records matching keyword {} in column {}".format(len(RIDs), keyword, column))
         results = []
@@ -480,11 +468,7 @@ class Table:
 
         # Track current tail rid
         self.current_tail_rid = tail_RID_of_current_update
-        #if verbose:
-            #print(self._page_ranges[current_update_loc.range])
-            #print(len(self._page_ranges))
-            #print(threading.activeCount())
-            #print(current_update_loc.range, current_update_loc.page)
+
         #preventing main_thread accessing the same resource the _page_directory_reallocation is locking at the same time
         '''Important: if KeyError pops out, increase the time.sleep duration!'''
         try:
@@ -599,7 +583,7 @@ class Table:
         _range = tail_page_to_work_on[0]
         _page = tail_page_to_work_on[1]
         _tail_rid = tail_page_to_work_on[2]
-        #print(tail_page_to_work_on[2])
+
         base_rid_tobe_changed = []
         record_tobe_changed = {}
         merged_records = []
@@ -617,11 +601,8 @@ class Table:
                 record_tobe_changed[base_rid_unique]=current_tail_page.read(tail_record_location.offset)[self.internal_id(0):]
 
         if verbose:
-            #print(count)
-            #print(base_rid_tobe_changed)
-            #print(record_tobe_changed)
             print("i'm in process to merge",threading.current_thread().name)
-        #print(self.check_merge[_range][-1],self.check_merge[_range])
+
         for baseid in range(self.check_merge[_range][-1]-Config.TOTAL_RECORDS_FULL+1, self.check_merge[_range][-1]+1):
             base_record_location = self.get_record_location(baseid)
             per_record_tobe_merge = self._page_ranges[base_record_location.range][base_record_location.page]
@@ -638,8 +619,8 @@ class Table:
 
     def _page_directory_reallocation(self, records, __range,__tail__rid, verbose=False):
         if verbose:
-            print('wait for me to finish',process_time())
-        #print(threading.current_thread().name)
+            print("Page directory reallocation says: wait for me to finish",process_time())
+
         lock = threading.Lock()
         with lock:
             for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
