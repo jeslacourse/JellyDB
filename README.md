@@ -3,26 +3,24 @@ A database management module for Python inspired by [L-Store](https://www.resear
 
 ## Usage
 
-To run `__main__.py` (performance testing script from instructors):
+To run Milestone 2 testers (correctness test cases from instructors)
 ```
-python -m JellyDB
-```
-
-To run `tester.py` (correctness test cases from instructors)
-```
-python -m JellyDB.tester
+mkdir ~/ECS165
+python -m JellyDB.m2_tester_part1
+python -m JellyDB.m2_tester_part2
 ```
 
-To run `test_on_performance.py` (performance testing script by JellyDB team)
+To run Milestone 2 index tester (non-primary key select test cases from instructors)
 ```
-python -m JellyDB.test_on_performance
+rm ~/ECS165/*
+python -m JellyDB.index_tester
 ```
 
 To run `test_on_correctness.py` (correctness test cases by JellyDB team):
 ```
 python -m JellyDB.test_on_correctness
 ```
-To run `performance_m2.py` (loops to test a parameter for 10 times, expect minimum 10min to complete per round)
+To run `performance_m2.py` (performance test cases by JellyDB team; loops to test a parameter 10 times, expect minimum 10 min to complete per round)
 ```
 python performance_m2.py
 ```
