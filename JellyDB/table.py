@@ -126,13 +126,9 @@ class Table:
 
         # Loop through page ranges
         for range_no, page_range in enumerate(self._page_ranges):
-            if verbose: print("Here is a page_range:", page_range)
 
             # Loop through base pages in page range
             for logical_base_page in page_range[0:Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE]:
-                if verbose: print("Here is a logical base page:", logical_base_page)
-                if verbose: print("Here is the base RID", logical_base_page.base_RID)
-                if verbose: print("Here is the bound RID", logical_base_page.bound_RID)
 
                 # Loop through records in base page
                 for offset in range(0, Config.MAX_RECORDS_PER_PAGE):
@@ -142,29 +138,21 @@ class Table:
                     if record == [0] * self._num_columns:
                         continue
 
-                    if verbose: print("\nHere is a record with:", record, \
-                    "\trid = ", logical_base_page.base_RID + offset,\
-                    "\tindirection = ", record[Config.INDIRECTION_COLUMN_INDEX])
-
                     current_indirection = record[Config.INDIRECTION_COLUMN_INDEX]
 
+                    # Skip records that are deleted
                     if current_indirection >= Config.RECORD_DELETION_MASK:
-                        if verbose: print("Nope that's deleted")
                         continue
-
 
                     # Base page is already merged, no need to look at tail page
                     if self.TPS[range_no] is not None \
                         and current_indirection > self.TPS[range_no] \
                         and current_indirection <= Config.START_TAIL_RID:
                         record_with_metadata = logical_page_of_target.read(target_loc.offset)
-                        if verbose: print("no that record wasn't updated")
 
                     # Base page is not merged
                     else:
-                        if verbose: print("This record might have been updated")
-
-                        # Base record has not been updated
+                        # Page is unmerged but record has not been updated
                         if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
                             latest_version_logical_page = logical_base_page
                             latest_version_offset = offset
@@ -176,7 +164,7 @@ class Table:
                             latest_version_offset = tail_record_loc.offset
 
                         record_with_metadata = latest_version_logical_page.read(latest_version_offset)
-                        if verbose: print("Here is the latest version:", record_with_metadata)
+                        if verbose: print("Here is the latest version of the record:", record_with_metadata)
 
                     # Insert into index
                     i = self.internal_id(column_to_index)
