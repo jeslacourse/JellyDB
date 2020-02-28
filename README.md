@@ -22,7 +22,10 @@ To run `test_on_correctness.py` (correctness test cases by JellyDB team):
 ```
 python -m JellyDB.test_on_correctness
 ```
-
+To run `performance_m2.py` (loops to test a parameter for 10 times, expect minimum 10min to complete per round)
+```
+python performance_m2.py
+```
 
 ## Team
 - __Benjamin Rausch__: Systems architect
