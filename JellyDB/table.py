@@ -456,18 +456,25 @@ class Table:
         if self.merge_queue:
             #not empty
             if threading.activeCount() == 1:
-                try:
-                    if verbose:
-                        print(self.merge_queue[-1])
-                        print(self.check_merge[self.merge_queue[-1][0]][0])
+                for i in range(len(self.merge_queue)):
+                    found = False
+                    try:
+                        if verbose:
+                            print(self.merge_queue[-1])
+                            print(self.check_merge[self.merge_queue[-1][0]][0])
 
-                    if self.merge_queue[0][0] == self.check_merge[self.merge_queue[0][0]][0]:
-                     # Same base page range and tail page range are full
-                        #print(self.merge_queue[-1])
-                        #print(self.merge_queue[-1][0])
-                        merge_thread = threading.Thread(target = self.merge, args =(self.merge_queue.popleft(),), name ='merge_thread')
-                        merge_thread.start()
-                except IndexError:
+                        #full base pages and one tail page are both full in the same page range
+                        if self.merge_queue[-1][0] == self.check_merge[self.merge_queue[-1][0]][0]:
+                            found = True
+                            break
+
+                    except IndexError:
+                        self.merge_queue.appendleft(self.merge_queue.pop())
+                        continue
+                if found == True:
+                    merge_thread = threading.Thread(target = self.merge, args =(self.merge_queue.pop(),), name ='merge_thread')
+                    merge_thread.start()
+                else:
                     pass
 
                 if verbose:
