@@ -149,9 +149,9 @@ class Table:
                 latest_version_logical_page = logical_page_of_target
                 latest_version_offset = target_loc.offset
             else:
-                latest_version_loc = self.get_record_location(current_indirection)
-                latest_version_offset = latest_version_loc.offset
-                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+                tail_record_loc = self.get_record_location(current_indirection)
+                latest_version_offset = tail_record_loc.offset
+                latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
 
             # Get record from most updated logical page
             record_with_metadata = latest_version_logical_page.read(latest_version_offset)
@@ -161,9 +161,9 @@ class Table:
                 latest_version_logical_page = logical_page_of_target
                 latest_version_offset = target_loc.offset
             else:
-                latest_version_loc = self.get_record_location(current_indirection)
-                latest_version_offset = latest_version_loc.offset
-                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+                tail_record_loc = self.get_record_location(current_indirection)
+                latest_version_offset = tail_record_loc.offset
+                latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
 
             # Get record from most updated logical page
             record_with_metadata = latest_version_logical_page.read(latest_version_offset)
@@ -309,29 +309,29 @@ class Table:
                     latest_version_logical_page = logical_page_of_target
                     latest_version_offset = target_loc.offset
                 else:
-                    latest_version_loc = self.get_record_location(current_indirection)
-                    latest_version_offset = latest_version_loc.offset
-                    latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+                    tail_record_loc = self.get_record_location(current_indirection)
+                    latest_version_offset = tail_record_loc.offset
+                    latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
 
                 # Get record from most updated logical page
-                latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+                record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
             elif (current_indirection < self.TPS[target_loc.range]):#not merged yet
                 if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
                     latest_version_logical_page = logical_page_of_target
                     latest_version_offset = target_loc.offset
                 else:
-                    latest_version_loc = self.get_record_location(current_indirection)
-                    latest_version_offset = latest_version_loc.offset
-                    latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+                    tail_record_loc = self.get_record_location(current_indirection)
+                    latest_version_offset = tail_record_loc.offset
+                    latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
 
                 # Get record from most updated logical page
-                latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+                record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
             elif current_indirection > self.TPS[target_loc.range] and current_indirection <= Config.START_TAIL_RID:#records already merged
-                latest_version_of_record = logical_page_of_target.read(target_loc.offset)
+                record_with_metadata = logical_page_of_target.read(target_loc.offset)
 
-            record = latest_version_of_record[self.internal_id(0):]
+            record = record_with_metadata[self.internal_id(0):]
             if verbose: print("Select function says: here's the record I found:", record)
 
             if len(not_asked_columns) > 0:
@@ -381,27 +381,27 @@ class Table:
                 latest_version_logical_page = logical_page_of_target
                 latest_version_offset = target_loc.offset
             else:
-                latest_version_loc = self.get_record_location(current_indirection)
-                latest_version_offset = latest_version_loc.offset
-                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+                tail_record_loc = self.get_record_location(current_indirection)
+                latest_version_offset = tail_record_loc.offset
+                latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
 
             # Get record from most updated logical page
-            latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+            record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
         elif (current_indirection < self.TPS[target_loc.range]):#not merged yet
             if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
                 latest_version_logical_page = logical_page_of_target
                 latest_version_offset = target_loc.offset
             else:
-                latest_version_loc = self.get_record_location(current_indirection)
-                latest_version_offset = latest_version_loc.offset
-                latest_version_logical_page = self._page_ranges[latest_version_loc.range][latest_version_loc.page]
+                tail_record_loc = self.get_record_location(current_indirection)
+                latest_version_offset = tail_record_loc.offset
+                latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
 
             # Get record from most updated logical page
-            latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
+            record_with_metadata = latest_version_logical_page.read(latest_version_offset)
         elif current_indirection > self.TPS[target_loc.range] and current_indirection <= Config.START_TAIL_RID:
             if verbose: print('I used TPS')
-            latest_version_of_record = logical_page_of_target.read(target_loc.offset)
+            record_with_metadata = logical_page_of_target.read(target_loc.offset)
 
         # Assign this tail record a RID
         tail_RID_of_current_update = self.allocate_next_available_tail_RID(target_loc.range)
@@ -423,10 +423,10 @@ class Table:
             else:
                 if columns[self.external_id(i)] is not None:
                     # we have a new value, update it in the index
-                    self.replace_if_indexed(i, target_RID, latest_version_of_record[i], columns[self.external_id(i)])
+                    self.replace_if_indexed(i, target_RID, record_with_metadata[i], columns[self.external_id(i)])
                     current_update.append(columns[self.external_id(i)])
                 else:
-                    current_update.append(latest_version_of_record[i])
+                    current_update.append(record_with_metadata[i])
 
         current_update_loc = self.get_record_location(tail_RID_of_current_update)
 
