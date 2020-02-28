@@ -356,32 +356,28 @@ class Table:
             current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
             self.assert_not_deleted(current_indirection)
 
-            if self.TPS[target_loc.range] == None:#not merged yet
-                if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
-                    latest_version_logical_page = logical_page_of_target
-                    latest_version_offset = target_loc.offset
-                else:
-                    tail_record_loc = self.get_record_location(current_indirection)
-                    latest_version_offset = tail_record_loc.offset
-                    latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
-
-                # Get record from most updated logical page
-                record_with_metadata = latest_version_logical_page.read(latest_version_offset)
-
-            elif (current_indirection < self.TPS[target_loc.range]):#not merged yet
-                if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
-                    latest_version_logical_page = logical_page_of_target
-                    latest_version_offset = target_loc.offset
-                else:
-                    tail_record_loc = self.get_record_location(current_indirection)
-                    latest_version_offset = tail_record_loc.offset
-                    latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
-
-                # Get record from most updated logical page
-                record_with_metadata = latest_version_logical_page.read(latest_version_offset)
-
-            elif current_indirection > self.TPS[target_loc.range] and current_indirection <= Config.START_TAIL_RID:#records already merged
+            # Base page is already merged, no need to look at tail page
+            if self.TPS[target_loc.range] is not None \
+                and current_indirection > self.TPS[target_loc.range] \
+                and current_indirection <= Config.START_TAIL_RID:
                 record_with_metadata = logical_page_of_target.read(target_loc.offset)
+
+            # Base page is not merged
+            else:
+                # Record has not been updated, no need to look at tail page
+                if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                    latest_version_logical_page = logical_page_of_target
+                    latest_version_offset = target_loc.offset
+
+                # Record has been updated, get location of tail record
+                else:
+                    tail_record_loc = self.get_record_location(current_indirection)
+                    latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
+                    latest_version_offset = tail_record_loc.offset
+
+                # Get record from most updated logical page
+                record_with_metadata = latest_version_logical_page.read(latest_version_offset)
+
 
             record = record_with_metadata[self.internal_id(0):]
             if verbose: print("Select function says: here's the record I found:", record)
