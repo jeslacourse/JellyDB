@@ -89,7 +89,7 @@ class Bufferpool:
         return frame_where_new_page_belongs
     
     def find_a_free_frame(self) -> int:
-        if len(self.data) >= Config.BUFFERPOOL_SIZE:
+        if len(self.data) >= Config.BUFFERPOOL_SIZE_IN_PAGES:
             return self.evict_least_recently_used_page()
         else:
             index_of_new_frame = len(self.data)
