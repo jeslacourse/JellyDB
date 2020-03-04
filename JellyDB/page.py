@@ -13,19 +13,26 @@ from JellyDB.bufferpool import Bufferpool
 class Page:
     def __init__(self, table: str, __range: int, bufferpool: Bufferpool):
         self.physical_page_location = bufferpool.allocate_page_id(table, __range)
+        self.physical_page_location_for_ready_only_actions = bufferpool.allocate_page_id_for_ready_only_transactions(table, __range)
+
         self.bufferpool = bufferpool
-    
+        self.table__ = table
+        self.range___=__range
+
     """
     :param value: int       # a number between 0 and 2**64 - 1 to insert as the next record in this page
     :param index: int       # which index in the page to write to (write permissions will be controlled in logical_page.py)
     """
     def write(self, value: int, index: int):
         self.bufferpool.write(self.physical_page_location, value, index)
-    
+
     """
     # Use this to retrieve a value from a physical page!
     :param index_of_record_to_get: int   # The index of the record to get
     :returns: int                        # The record as an integer
     """
     def get_record(self, index_of_record_to_get: int) -> int:
+        return self.bufferpool.read(self.physical_page_location, index_of_record_to_get)
+
+    def get_record_for_read_only_actions(self, index_of_record_to_get:int, page_count:int) -> int:
         return self.bufferpool.read(self.physical_page_location, index_of_record_to_get)

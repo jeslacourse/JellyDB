@@ -1,11 +1,11 @@
 class Config:
     # PUT ALL CONSTANTS HERE
-    _HARD_DISK_PAGE_SIZE = 2048
+    _HARD_DISK_PAGE_SIZE = 4096
     RECORD_SIZE_IN_BYTES = 8
     MAX_RECORD_VALUE = 2**(RECORD_SIZE_IN_BYTES*8) - 1
 
     # Every page of database data allocated will have this many bytes in it
-    PAGE_SIZE = _HARD_DISK_PAGE_SIZE
+    PAGE_SIZE = _HARD_DISK_PAGE_SIZE // 2
     MAX_RECORDS_PER_PAGE = PAGE_SIZE // RECORD_SIZE_IN_BYTES
 
     # Every deleted record will have the first available bit flipped

@@ -59,6 +59,7 @@ class Table:
 
         # Initialize list of page ranges then create first range
         self._page_ranges = []
+        self.count = 0
         self._add_page_range()
 
         # Dictionary of representative rid --> (page range, page no. within range)
@@ -69,9 +70,11 @@ class Table:
         self.current_tail_rid = 0
         self.current_base_rid = 0
         self.check_merge = []
+        self.merged = False
         self.TPS = [None]
         self.merge_queue = collections.deque()
         self.allocate_ephemeral_structures()
+        self.records_already_merged = collections.deque()
 
     """
     # Anything created in here is destroyed before we save our database to disk
@@ -400,7 +403,7 @@ class Table:
             # Get record from most updated logical page
             latest_version_of_record = latest_version_logical_page.read(latest_version_offset)
         elif current_indirection > self.TPS[target_loc.range] and current_indirection <= Config.START_TAIL_RID:
-            if verbose: print('I used TPS')
+            #if verbose: print('I used TPS')
             latest_version_of_record = logical_page_of_target.read(target_loc.offset)
 
         # Assign this tail record a RID
@@ -439,29 +442,40 @@ class Table:
             #print(current_update_loc.range, current_update_loc.page)
         #preventing main_thread accessing the same resource the _page_directory_reallocation is locking at the same time
         '''Important: if KeyError pops out, increase the time.sleep duration!'''
+        '''
         try:
             if threading.activeCount() >1:
                 time.sleep(0.05)
             self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update)
         except KeyError:
             raise KeyError('check line 447, increase time.sleep duration!')
+        '''
+        self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update)
 
         if ((Config.START_TAIL_RID-self.current_tail_rid) % Config.MAX_RECORDS_PER_PAGE) == 0:
-            if verbose:
-                print(self.current_tail_rid)
+            #if verbose:
+                #print(self.current_tail_rid)
             #print(current_update_loc.range,'pagerange',len(self._page_ranges))
             self.merge_queue.appendleft([current_update_loc.range,current_update_loc.page,self.current_tail_rid])
             #print('q',len(self.merge_queue))
+            '''add page directory update into mainthread'''
+        if self.merged:
+            while self.records_already_merged:
+                #print('on my way to update, current merge queue is',len(self.merge_queue),'current_update queue is', len(self.records_already_merged))
+                self._page_directory_reallocation(self.records_already_merged.pop())
+        else:
+            pass
 
         if self.merge_queue:
             #not empty
             if threading.activeCount() == 1:
+                #print(len(self.merge_queue))
                 for i in range(len(self.merge_queue)):
                     found = False
                     try:
-                        if verbose:
-                            print(self.merge_queue[-1])
-                            print(self.check_merge[self.merge_queue[-1][0]][0])
+                        #if verbose:
+                            ##print(self.merge_queue[-1])
+                            #print(self.check_merge[self.merge_queue[-1][0]][0])
 
                         #full base pages and one tail page are both full in the same page range
                         if self.merge_queue[-1][0] == self.check_merge[self.merge_queue[-1][0]][0]:
@@ -477,14 +491,16 @@ class Table:
                 else:
                     pass
 
-                if verbose:
-                    print("i'm still in main thread", threading.current_thread().name)
+                #if verbose:
+                    #print("i'm still in main thread", threading.current_thread().name)
             else:
                 #another thread was running
                 pass
         else:
             #empty
             pass
+
+
 
     """
     # Convenience method to replace one value in an index with another
@@ -548,14 +564,15 @@ class Table:
 
     # Call merge function
     def merge(self, tail_page_to_work_on, verbose=False):
+        #print('beginning merging')
         _range = tail_page_to_work_on[0]
         _page = tail_page_to_work_on[1]
         _tail_rid = tail_page_to_work_on[2]
-        #print(tail_page_to_work_on[2])
+        #print(tail_page_to_work_on[1])
         base_rid_tobe_changed = []
         record_tobe_changed = {}
         merged_records = []
-        if verbose: print(_tail_rid)
+        #if verbose: print(_tail_rid)
         #count = 0
         #time.sleep(0.1)
 
@@ -563,10 +580,12 @@ class Table:
             #count +=1
             tail_record_location = self.get_record_location(id)
             current_tail_page = self._page_ranges[tail_record_location.range][tail_record_location.page]
+            #to_compare = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
             base_rid_unique = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
+            #print(base_rid_unique,'baserid is here', to_compare)
             if base_rid_unique not in base_rid_tobe_changed:
                 base_rid_tobe_changed.append(base_rid_unique)
-                record_tobe_changed[base_rid_unique]=current_tail_page.read(tail_record_location.offset)[self.internal_id(0):]
+                record_tobe_changed[base_rid_unique]=current_tail_page.read(tail_record_location.offset)
 
         if verbose:
             #print(count)
@@ -578,40 +597,48 @@ class Table:
             base_record_location = self.get_record_location(baseid)
             per_record_tobe_merge = self._page_ranges[base_record_location.range][base_record_location.page]
             try:
-                current_base_record = per_record_tobe_merge.read(base_record_location.offset)[self.internal_id(0):]
+                current_base_record = per_record_tobe_merge.read(base_record_location.offset)
             except KeyError:
                 raise KeyError('check line 447, add sleep time')
             if baseid in base_rid_tobe_changed:
                 merged_records.append(record_tobe_changed[baseid])
             else:
                 merged_records.append(current_base_record)
-        self._page_directory_reallocation(merged_records,_range,_tail_rid)
+        #self._page_directory_reallocation(merged_records,_range,_tail_rid)
+        self.records_already_merged.appendleft([merged_records,_range,_tail_rid])
+        #print('exiting merge thread')
+        self.merged = True
+        #print(merged_records[0])
 
 
-    def _page_directory_reallocation(self, records, __range,__tail__rid, verbose=False):
+    def _page_directory_reallocation(self, queue_for_records_already_merged, verbose=True):
         if verbose:
             print('wait for me to finish',process_time())
         #print(threading.current_thread().name)
-        lock = threading.Lock()
-        with lock:
-            for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
-                self.merge_count = 0
-                #base pages will always remain as first several pages in the logical page range
-                if verbose: print(len(self._page_ranges[__range][n].pages), threading.current_thread().name)
-                self._page_ranges[__range][n].merge_write(self._page_ranges[__range][n].pages,self.num_columns, __range)
-                if verbose: print(len(self._page_ranges[__range][n].pages))
-                for record in records[n*Config.MAX_RECORDS_PER_PAGE:(n+1)*Config.MAX_RECORDS_PER_PAGE]:
-                    for k in range(len(record)):
-                        self._page_ranges[__range][n].pages[k+Config.METADATA_COLUMN_COUNT].write(record[k], self.merge_count)
-                    self.merge_count+=1
-                #reading at logical pages always return first serveral columns, metadata + userdefined columns
-                #so merged columns inserted will be directly detected.
-            self.TPS[__range] = __tail__rid-Config.MAX_RECORDS_PER_PAGE+1
-            self._recreate_page_directory()
+        records = queue_for_records_already_merged[0]
+        __range = queue_for_records_already_merged[1]
+        __tail__rid = queue_for_records_already_merged[2]
+        for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
+            self.merge_count = 0
+            #base pages will always remain as first several pages in the logical page range
+            if verbose: print(len(self._page_ranges[__range][n].pages), threading.current_thread().name)
+            self._page_ranges[__range][n].merge_write(self._page_ranges[__range][n].pages,self.num_columns, __range)
+            if verbose: print(len(self._page_ranges[__range][n].pages))
+            for record in records[n*Config.MAX_RECORDS_PER_PAGE:(n+1)*Config.MAX_RECORDS_PER_PAGE]:
+                for k in range(len(record)):
+                    self._page_ranges[__range][n].pages[k+Config.METADATA_COLUMN_COUNT].write(record[k], self.merge_count)
+                self.merge_count+=1
+            #reading at logical pages always return first serveral columns, metadata + userdefined columns
+            #so merged columns inserted will be directly detected.
+        self.TPS[__range] = __tail__rid-Config.MAX_RECORDS_PER_PAGE+1
+        self._recreate_page_directory()
+        self.merged = False
+
         if verbose: print('Table page directory reallocation says: I finished updating, you can go', process_time())
         #print(records)
         #self.lock = None
     def _add_page_range(self):
+        self.count+=3
         self._page_ranges.append(
             self._RID_allocator.make_page_range(self._name, len(self._page_ranges), self._num_columns)
         )
@@ -623,6 +650,7 @@ class Table:
     :param page_range: int  # page range to add the tail page to
     """
     def _add_tail_page(self, page_range: int):
+        self.count+=1
         self._page_ranges[page_range].append(
             self._RID_allocator.make_tail_page(self._name, page_range, self._num_columns)
         )

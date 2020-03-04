@@ -5,24 +5,24 @@ from JellyDB.buffered_page import BufferedPage
 import os
 
 # This provides Page objects with access to their buffers without letting them
-# know whether the page objects were on disk or in memory. 
+# know whether the page objects were on disk or in memory.
 # We are lazy - only increase size of bufferpool when someone requests something.
 #
 # You must call "open" before using this class.
 class Bufferpool:
     def __init__(self):
         pass
-    
+
     def _allocate_members(self):
         self.data = []
         # map from PhysicalPageLocation to page's location within `self.data`
         self.where_to_find_page_in_pool = {}
         self.lru_tracker = []
-    
+
     def _deallocate_members(self):
         self.data = None
         self.where_to_find_page_in_pool = None
-    
+
     """
     # Looks at how big the file is (i.e. how many pages have been stored there
     # already) and returns the number of pages already present. That number will
@@ -37,11 +37,20 @@ class Bufferpool:
         number_of_pages_already_in_file = page.tell() // Config.PAGE_SIZE
         page.write(b"\x00" * Config.PAGE_SIZE) # Guarantees there is enough space to store on disk BEFORE we start performing transactions
         page.close()
+        #print(number_of_pages_already_in_file,'write')
         return PhysicalPageLocation(self.path_to_db_files, table, __range, number_of_pages_already_in_file)
-    
+
+    def allocate_page_id_for_ready_only_transactions(self, table: str, __range: int) -> PhysicalPageLocation:
+        page = open(PhysicalPageLocation.filename_from(self.path_to_db_files, table, __range), 'r')
+        #print(page.tell())
+        number_of_pages_already_in_file = page.tell() // Config.PAGE_SIZE + 1
+        #print(number_of_pages_already_in_file,'readyonly')
+        page.close()
+        return PhysicalPageLocation(self.path_to_db_files, table, __range, number_of_pages_already_in_file)
+
     def pin(self, page: BufferedPage):
         page.transactions_using += 1
-    
+
     def unpin(self, physical_page_location: PhysicalPageLocation): # a PhysicalPageLocation will be given upon a call to allocate_page_id()
         target = self._get_page(physical_page_location, False)
         if (target.transactions_using <= 0):
@@ -54,19 +63,39 @@ class Bufferpool:
         PageUtils.write(buffered_page.data, value, index)
         buffered_page.dirty = True
         self.unpin(physical_page_location)
-    
+
     def read(self, physical_page_location: PhysicalPageLocation, offset_within_page: int) -> int:
         buffered_page = self._get_page(physical_page_location, True)
         self.pin(buffered_page)
         val = PageUtils.get_record(buffered_page.data, offset_within_page)
         self.unpin(physical_page_location)
         return val
-    
+
+    def merge_read_(self, physical_page_location: PhysicalPageLocation, offset_within_page: int) -> int:
+        buffered_page = self._get_read_only_page(physical_page_location, True)
+        self.pin(buffered_page)
+        val = PageUtils.get_record(buffered_page.data, offset_within_page)
+        self.unpin(physical_page_location)
+        return val
+
     def _get_frame_number_for_page(self, physical_page_location: PhysicalPageLocation) -> int:
         if physical_page_location not in self.where_to_find_page_in_pool:
             return self._load_into_memory(physical_page_location)
         return self.where_to_find_page_in_pool[physical_page_location]
-    
+
+    def _get_read_only_frame_number_for_page(self, physical_page_location: PhysicalPageLocation) -> int:
+        if physical_page_location not in self.where_to_find_page_in_pool:
+            return self._load_read_only_into_memory(physical_page_location)
+        return self.where_to_find_page_in_pool[physical_page_location]
+    def _get_read_only_page(self, physical_page_location: PhysicalPageLocation, update_LRU: bool) -> BufferedPage:
+        frame = self._get_read_only_frame_number_for_page(physical_page_location)
+        if update_LRU:
+            if frame in self.lru_tracker: # This "if" allows for the case when a frame has just been created and is not in the list
+                self.lru_tracker.remove(frame)
+            self.lru_tracker.append(frame)
+        return self.data[frame]
+
+
     """
     # Updates the frames' LRU
     """
@@ -82,49 +111,73 @@ class Bufferpool:
     :returns:   # Frame number where the requested page has been loaded
     """
     def _load_into_memory(self, physical_page_location: PhysicalPageLocation) -> int:
+        if physical_page_location not in self.where_to_find_page_in_pool:
+            frame_where_new_page_belongs = self.find_a_free_frame(physical_page_location)
+            if frame_where_new_page_belongs == None:
+                pass
+            else:
+                page = self.data[frame_where_new_page_belongs]
+                page.set_new_page(physical_page_location)
+                self.where_to_find_page_in_pool[physical_page_location] = frame_where_new_page_belongs
+                return frame_where_new_page_belongs
+        else:
+            pass
+    def _load_read_only_into_memory(self, physical_page_location: PhysicalPageLocation) -> int:
         frame_where_new_page_belongs = self.find_a_free_frame()
         page = self.data[frame_where_new_page_belongs]
-        page.set_new_page(physical_page_location)
+        page.set_new_read_only_page(physical_page_location)
         self.where_to_find_page_in_pool[physical_page_location] = frame_where_new_page_belongs
         return frame_where_new_page_belongs
-    
-    def find_a_free_frame(self) -> int:
-        if len(self.data) >= Config.BUFFERPOOL_SIZE:
-            return self.evict_least_recently_used_page()
+
+    def find_a_free_frame(self,physical_page_location: PhysicalPageLocation) -> int:
+        if physical_page_location not in self.where_to_find_page_in_pool:
+            if len(self.data) >= Config.BUFFERPOOL_SIZE:
+                return self.evict_least_recently_used_page(physical_page_location)
+            else:
+                index_of_new_frame = len(self.data)
+                self.data.append(BufferedPage(None))
+                return index_of_new_frame
         else:
-            index_of_new_frame = len(self.data)
-            self.data.append(BufferedPage(None))
-            return index_of_new_frame
-            
+            pass
+
 
     """
     # Only call if bufferpool size is > 0.
     """
-    def evict_least_recently_used_page(self) -> int:
-        frame_of_page_to_evict = self.get_index_of_LRU_page_we_can_evict()
-        page_to_evict = self.data[frame_of_page_to_evict]
-        if page_to_evict.valid and page_to_evict.dirty:
-            page_to_evict.flush_to_disk()
-        del self.where_to_find_page_in_pool[page_to_evict.physical_page_location] # This page will no longer be able to be found in the index
-        page_to_evict.valid = False
-        
-        return frame_of_page_to_evict
-    
-    def get_index_of_LRU_page_we_can_evict(self):
-        for i in self.lru_tracker:
-            if (self.data[i]).transactions_using == 0:
-                return i
-        raise Exception("All frames are pinned")
-    
+    def evict_least_recently_used_page(self, physical_page_location: PhysicalPageLocation) -> int:
+        if physical_page_location not in self.where_to_find_page_in_pool:
+            frame_of_page_to_evict = self.get_index_of_LRU_page_we_can_evict(physical_page_location)
+            if frame_of_page_to_evict == None:
+                return None
+            else:
+                page_to_evict = self.data[frame_of_page_to_evict]
+                if page_to_evict.valid and page_to_evict.dirty:
+                    page_to_evict.flush_to_disk()
+                del self.where_to_find_page_in_pool[page_to_evict.physical_page_location] # This page will no longer be able to be found in the index
+                page_to_evict.valid = False
+
+                return frame_of_page_to_evict
+        else:
+            return None
+
+    def get_index_of_LRU_page_we_can_evict(self, physical_page_location: PhysicalPageLocation):
+        if physical_page_location not in self.where_to_find_page_in_pool:
+            for i in self.lru_tracker:
+                if (self.data[i]).transactions_using == 0:
+                    return i
+            raise Exception("All frames are pinned")
+        else:
+            return None
+
     def flush_all_data_to_disk(self):
         for buffered_page in self.data:
             if buffered_page.valid and buffered_page.dirty:
                 buffered_page.flush_to_disk()
-    
+
     def close(self):
         self.flush_all_data_to_disk()
         self._deallocate_members()
-    
+
     # When db.open
     def open(self, path: str):
         self._allocate_members()

@@ -24,7 +24,7 @@ class LogicalPage:
 
     def has_capacity(self):
         return self.first_available_RID() != 0
-    
+
     def first_available_RID(self):
         next_RID = self.base_RID + self.record_count
         if next_RID > self.bound_RID:
@@ -37,8 +37,17 @@ class LogicalPage:
     def get(self, column: int, offset: int):
         return self.pages[column].get_record(offset)
 
+    def get_for_read_only_actions(self, column: int, offset: int, pagecount):
+        return self.pages[column].get_record_for_read_only_actions(offset, pagecount)
+
     # Lisa added this function
     # Read all columns of a record
+    def merge_read(self, id, pagecount):
+        values = []
+        for i in range(Config.METADATA_COLUMN_COUNT,self.num_columns):
+            values.append(self.pages[i].get_record_for_read_only_actions(id, pagecount))
+        return values
+
     def read(self, id):
         # Create empty list of values
         values = []
