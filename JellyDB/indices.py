@@ -1,3 +1,5 @@
+from JellyDB.xs_lock import XSLock
+
 """
 # Indexes the specified column of the specified table to speed up select queries
 # This data structure is usually a B-Tree
@@ -18,82 +20,88 @@ class Indices:
     """
     def __init__(self):
         self.data = {} # map from column numbers to dictionaries.
+        self.lock = XSLock()
 
     def has_index(self, column: int) -> bool:
-        return column in self.data
+        with self.lock.acquire_S():
+            return column in self.data
 
     """
     # returns list of RIDs, also known as: the location of all records with the given value in the given column
     # Returns "None" if the column exists, but not the value
     """
     def locate(self, column: int, value: int, verbose=False) -> list:
-        if verbose: print("Attempting to search for value {} in column {}".format(value, column))
-        if column not in self.data:
-            raise Exception("No index exists for column {}".format(str(column)))
-        return self.data[column][value]
+        with self.lock.acquire_S():
+            if verbose: print("Attempting to search for value {} in column {}".format(value, column))
+            if column not in self.data:
+                raise Exception("No index exists for column {}".format(str(column)))
+            return self.data[column][value]
 
     """
     # Checks whether a certain value exists in the given column's index
     """
     def contains(self, column: int, value: int) -> bool:
-        if column not in self.data:
-            raise Exception("No index exists for column {}".format(str(column)))
-        return self.data[column].get(value) is not None
+        with self.lock.acquire_S():
+            if column not in self.data:
+                raise Exception("No index exists for column {}".format(str(column)))
+            return self.data[column].get(value) is not None
 
     """
     # After this call, self.locate(column, value) should return a list containing RID.
     """
     def insert(self, column: int, value: int, RID: int, verbose=False):
-        if column not in self.data:
-            raise Exception("No index exists for given column")
+        with self.lock.acquire_X():
+            if column not in self.data:
+                raise Exception("No index exists for given column")
 
-        if verbose: print("Attempting to insert keyword {} from RID {} in index on column {}".format(value, RID, column))
+            if verbose: print("Attempting to insert keyword {} from RID {} in index on column {}".format(value, RID, column))
 
-        list_of_RIDs_for_this_value = self.data[column].get(value)
+            list_of_RIDs_for_this_value = self.data[column].get(value)
 
-        if list_of_RIDs_for_this_value is None:
-            self.data[column][value] = []
-            list_of_RIDs_for_this_value = self.data[column][value]
+            if list_of_RIDs_for_this_value is None:
+                self.data[column][value] = []
+                list_of_RIDs_for_this_value = self.data[column][value]
 
-        elif value in list_of_RIDs_for_this_value:
-            # Commented out to not raise exception if value already exists in index.
-            # This was only relevant when index was only on primary key.
-            # raise Exception("Value already exists")
-            pass
+            #elif value in list_of_RIDs_for_this_value:
+            #    # Commented out to not raise exception if value already exists in index.
+            #    # This was only relevant when index was only on primary key.
+            #    # raise Exception("Value already exists")
+            #    pass
 
-        list_of_RIDs_for_this_value.append(RID)
+            list_of_RIDs_for_this_value.append(RID)
 
     """
     # After this call, self.locate(column, value) should return a list that does not contain RID.
     """
     def delete(self, column: int, value: int, RID: int, verbose=False):
-        if verbose:
-            print("indices delete says here is self.data before delete")
-            print(self.data)
+        with self.lock.acquire_X():
+            if verbose:
+                print("indices delete says here is self.data before delete")
+                print(self.data)
 
-        if column not in self.data:
-            raise Exception("No index exists for given column")
+            if column not in self.data:
+                raise Exception("No index exists for given column")
 
-        # Get RIDs associated with the value given
-        list_of_RIDs_for_this_value = self.data[column].get(value)
-        if verbose:
-            print("indices delete says here is list of RIDs for value")
-            print(list_of_RIDs_for_this_value)
+            # Get RIDs associated with the value given
+            list_of_RIDs_for_this_value = self.data[column].get(value)
+            if verbose:
+                print("indices delete says here is list of RIDs for value")
+                print(list_of_RIDs_for_this_value)
 
-        if list_of_RIDs_for_this_value is None:
-            self.data[column][value] = []
-            list_of_RIDs_for_this_value = self.data[column][value]
+            if list_of_RIDs_for_this_value is None:
+                self.data[column][value] = []
+                list_of_RIDs_for_this_value = self.data[column][value]
 
-        # Ensure the RID given is associated with the value given
-        if RID not in list_of_RIDs_for_this_value:
-            print(list_of_RIDs_for_this_value)
-            raise Exception("Value {} in column {} not associated with rid {}".format(value, column, RID))
+            # Ensure the RID given is associated with the value given
+            if RID not in list_of_RIDs_for_this_value:
+                print(list_of_RIDs_for_this_value)
+                raise Exception("Value {} in column {} not associated with rid {}".format(value, column, RID))
 
-        # Remove RID from index on this value
-        list_of_RIDs_for_this_value.remove(RID)
-        if verbose:
-            print("indices delete says here is self.data after delete:")
-            print(self.data)
+            # Remove RID from index on this value
+            list_of_RIDs_for_this_value.remove(RID)
+            if verbose:
+                print("indices delete says here is self.data after delete:")
+                print(self.data)
 
     """
     # Create index on specific column. Should raise Exception if index already exists.

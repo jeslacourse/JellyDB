@@ -6,11 +6,10 @@ import pickle
 import os
 
 class DBDataBundle():
-    def __init__(self, tables: dict, bufferpool, RID_allocator, indices):
+    def __init__(self, tables: dict, bufferpool, RID_allocator):
         self.tables = tables
         self.bufferpool = bufferpool
         self.RID_allocator = RID_allocator
-        self.indices = indices
 
 class Database():
     DATABASE_FILE_NAME = "db.bin"
@@ -27,11 +26,6 @@ class Database():
             with open(self.db_backup_filename, "rb") as db_backup:
                 db_data_bundle = pickle.load(db_backup)
                 self.tables = db_data_bundle.tables
-
-                # Reload indices
-                for table in self.tables.values():
-                    table.reload_ephemeral_structures(db_data_bundle.indices[table._name])
-
                 self.bufferpool = db_data_bundle.bufferpool
                 self.RID_allocator = db_data_bundle.RID_allocator
 
@@ -46,20 +40,9 @@ class Database():
     def close(self, verbose=False):
         self.bufferpool.close()
 
-        # Dictionary of indices objects to pickle
-        # Key: table name; value: indices object
-        indices_to_pickle = {}
-
-        for table in self.tables:
-            if verbose: print("Close says: dealing with table {}".format(self.tables[table]._name))
-            # Copy each table's indices
-            indices_to_pickle[self.tables[table]._name] = self.tables[table]._indices
-            # Deallocate indices
-            self.tables[table].deallocate_ephemeral_structures()
-
         # Pickle data bundle
         with open(self.db_backup_filename, "w+b") as db_file:
-            to_pickle = DBDataBundle(self.tables, self.bufferpool, self.RID_allocator, indices_to_pickle)
+            to_pickle = DBDataBundle(self.tables, self.bufferpool, self.RID_allocator)
             pickle.dump(to_pickle, db_file)
             self.path_to_db_files = None
             self.db_backup_filename = None

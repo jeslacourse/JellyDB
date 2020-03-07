@@ -3,6 +3,7 @@ from JellyDB.indices import Indices
 from JellyDB.page import Page
 from JellyDB.config import Config
 from JellyDB.physical_page_location import PhysicalPageLocation
+from JellyDB.xs_lock import XSLock
 from time import time_ns
 import numpy as np
 import threading
@@ -61,8 +62,8 @@ class Table:
         self._page_ranges = []
         self._add_page_range()
 
-        # Dictionary of representative rid --> (page range, page no. within range)
-        self._page_directory = {}
+        self._page_directory_lock = XSLock()
+        # self._page_directory is a Dictionary of representative rid --> (page range, page no. within range)
         self._recreate_page_directory()
 
         # Attributes for merging
@@ -71,28 +72,9 @@ class Table:
         self.check_merge = []
         self.TPS = [None]
         self.merge_queue = collections.deque()
-        self.allocate_ephemeral_structures()
 
-    """
-    # Anything created in here is destroyed before we save our database to disk
-    """
-
-    def allocate_ephemeral_structures(self, verbose=False):
-        if verbose: print("Allocating index for table {}".format(self._name))
-
-        # Index data structure contains all indexes for table
         self._indices = Indices()
-
-        # Setup index on primary key only
         self._indices.create_index(self.internal_id(self._key))
-
-    def reload_ephemeral_structures(self, indices, verbose=False):
-        if verbose: print("Reloading index for table {}".format(self._name))
-        self._indices = indices
-        if verbose: print("Reload ephemeral structures says here is _indices.data:\n", self._indices.data)
-
-    def deallocate_ephemeral_structures(self):
-        self._indices = None
 
 
     """
@@ -266,7 +248,7 @@ class Table:
         # Get next base rid, find what page it belongs to, and write the record to that page
         RID = self._allocate_first_available_base_RID()
         record_location = self.get_record_location(RID)
-        self._page_ranges[record_location.range][record_location.page].write(record_with_metadata)
+        self._page_ranges[record_location.range][record_location.page].write(record_with_metadata, record_location.offest)
 
         # Create entry for this record in index(es)
         for i in range(self.internal_id(0), self.internal_id(self._num_content_columns)):
@@ -440,7 +422,7 @@ class Table:
             record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
         # Assign this tail record a RID
-        tail_RID_of_current_update = self.allocate_next_available_tail_RID(target_loc.range)
+        tail_RID_of_current_update = self._allocate_next_available_tail_RID(target_loc.range)
 
         # only time we edit the base page: updating indirection column
         logical_page_of_target.update_indirection_column(target_loc.offset, tail_RID_of_current_update)
@@ -474,7 +456,7 @@ class Table:
         try:
             if threading.activeCount() >1:
                 time.sleep(0.05)
-            self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update)
+            self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update, current_update_loc.offset)
         except KeyError:
             raise KeyError('check line 447, increase time.sleep duration!')
 
@@ -531,18 +513,19 @@ class Table:
 
     """
     # Gets the tail RID that a new updated version of a record should be
-    # written into, creating a new tail page if necessary
+    # written into, creating a new tail page if necessary. Must be atomic!
     """
-    def allocate_next_available_tail_RID(self, target_page_range: int):
+    def _allocate_next_available_tail_RID(self, target_page_range: int):
+        self._RID_allocator.lock.acquire() # no one else allocating any RIDs
         first_available_spot = self._next_tail_RID_to_allocate[target_page_range]
         if first_available_spot == 0:
             self._add_tail_page(target_page_range)
             first_available_spot = self._page_ranges[target_page_range][-1].base_RID
         next_available_spot = first_available_spot + 1
         if next_available_spot > self._page_ranges[target_page_range][-1].bound_RID:
-            next_available_spot = 0 # NO SPACE LEFT
+            next_available_spot = 0 # NO SPACE LEFT on current tail page
         self._next_tail_RID_to_allocate[target_page_range] = next_available_spot
-
+        self._RID_allocator.lock.release()
         return first_available_spot
 
     """
@@ -621,7 +604,7 @@ class Table:
         if verbose:
             print("Page directory reallocation says: wait for me to finish",process_time())
 
-        lock = threading.Lock()
+        lock = threading.Lock() # TODO i doubt this lock does anything. it is created within a function, so I think any thread calling this function will create its own lock. - Ben
         with lock:
             for n in range(0, Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):#number of basepage
                 self.merge_count = 0
@@ -641,21 +624,23 @@ class Table:
         #print(records)
         #self.lock = None
     def _add_page_range(self):
+        self._RID_allocator.lock.acquire()
         self._page_ranges.append(
             self._RID_allocator.make_page_range(self._name, len(self._page_ranges), self._num_columns)
         )
         # keep track of the first tail RID in this new page range
         self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
+        self._RID_allocator.lock.release()
         self._recreate_page_directory()
 
     """
-    :param page_range: int  # page range to add the tail page to
+    :param page_range: int  # page range to add the tail page to. Only use this if you 
     """
     def _add_tail_page(self, page_range: int):
         self._page_ranges[page_range].append(
             self._RID_allocator.make_tail_page(self._name, page_range, self._num_columns)
         )
-        self._recreate_page_directory()
+        self._recreate_page_directory() # TODO does the page directory need to have a lock? I think so
 
     """
     # There are 4096 RIDs that might be the base RID for the page this RID is
@@ -668,13 +653,14 @@ class Table:
     def get_record_location(self, RID: int):
         lowest_RID_that_might_be_the_base_for_this_RIDs_page = \
             RID - (Config.MAX_RECORDS_PER_PAGE - 1)
-        for i in range(lowest_RID_that_might_be_the_base_for_this_RIDs_page, RID + 1):
-            page_rng_and_page_index = self._page_directory.get(i)
-            if page_rng_and_page_index is not None:
-                page_rng_index = page_rng_and_page_index[0]
-                page_index = page_rng_and_page_index[1]
-                offset = RID - i
-                return RecordLocation(page_rng_index, page_index, offset)
+        with self._page_directory_lock.acquire_S():
+            for i in range(lowest_RID_that_might_be_the_base_for_this_RIDs_page, RID + 1):
+                page_rng_and_page_index = self._page_directory.get(i)
+                if page_rng_and_page_index is not None:
+                    page_rng_index = page_rng_and_page_index[0]
+                    page_index = page_rng_and_page_index[1]
+                    offset = RID - i
+                    return RecordLocation(page_rng_index, page_index, offset)
 
         raise Exception("Record does not exist in this table")
 
@@ -686,12 +672,13 @@ class Table:
     """
     def _recreate_page_directory(self):
         # if a number is within <Records-in-page> of a record's rids, that's the page for it!
-        self._page_directory = {}
-        for i in range(len(self._page_ranges)):
-            page_rng = self._page_ranges[i]
-            for j in range(len(page_rng)):
-                page = page_rng[j]
-                self._page_directory[page.base_RID] = (i,j)
+        with self._page_directory_lock.acquire_X():
+            self._page_directory = {}
+            for i in range(len(self._page_ranges)):
+                page_rng = self._page_ranges[i]
+                for j in range(len(page_rng)):
+                    page = page_rng[j]
+                    self._page_directory[page.base_RID] = (i,j)
 
     def delete_all_files_owned_in(self, path_to_db_files: str):
         PhysicalPageLocation.delete_table_files(path_to_db_files, self._name, len(self._page_ranges))

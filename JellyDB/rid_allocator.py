@@ -1,12 +1,14 @@
 from JellyDB.config import Config
 from JellyDB.bufferpool import Bufferpool
 from JellyDB.logical_page import LogicalPage
+import threading
 
 class RIDAllocator:
     def __init__(self, bufferpool: Bufferpool):
         self.bufferpool = bufferpool
         self.nextRIDToAssign = Config.START_RID
         self.nextTailRIDToAssign = Config.START_TAIL_RID
+        self.lock = threading.Lock()
     
     """
     :param filename: str    # The filename that this new page range should have - of the form "TableName-index"
