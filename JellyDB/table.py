@@ -579,42 +579,55 @@ class Table:
         return sum(summation)
 
     # Call merge function
+    """
+    :param tail_page_to_work_on: RecordLocation      # Location of last tail record in page range to merge
+    """
     def merge(self, tail_page_to_work_on, verbose=False):
         _range = tail_page_to_work_on[0]
         _page = tail_page_to_work_on[1]
-        _tail_rid = tail_page_to_work_on[2]
+        _last_tail_rid = tail_page_to_work_on[2]
 
-        base_rid_tobe_changed = []
-        record_tobe_changed = {}
+        base_records_to_replace = []
+        replacement_records = {}
         merged_records = []
-        if verbose: print(_tail_rid)
+        if verbose: print(_last_tail_rid)
         #count = 0
         #time.sleep(0.1)
 
-        for id in range(_tail_rid, _tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
-            #count +=1
-            tail_record_location = self.get_record_location(id)
+        # Loop backwards through tail records in range
+        for rid in range(_last_tail_rid, _last_tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
+            # Get tail record values and corresponding base rid
+            tail_record_location = self.get_record_location(rid)
             current_tail_page = self._page_ranges[tail_record_location.range][tail_record_location.page]
-            base_rid_unique = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
-            if base_rid_unique not in base_rid_tobe_changed:
-                base_rid_tobe_changed.append(base_rid_unique)
-                record_tobe_changed[base_rid_unique]=current_tail_page.read(tail_record_location.offset)[self.internal_id(0):]
+            corresponding_base_rid = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
+
+            # Save base rid to be changed to list
+            # Add tail record values to replacement records dictionary
+            if corresponding_base_rid not in base_records_to_replace:
+                base_records_to_replace.append(corresponding_base_rid)
+                replacement_records[corresponding_base_rid]=current_tail_page.read(tail_record_location.offset)[self.internal_id(0):]
 
         if verbose:
             print("i'm in process to merge",threading.current_thread().name)
 
+        # Loop forwards through base records in range
         for baseid in range(self.check_merge[_range][-1]-Config.TOTAL_RECORDS_FULL+1, self.check_merge[_range][-1]+1):
+            # Get current base record values
             base_record_location = self.get_record_location(baseid)
-            per_record_tobe_merge = self._page_ranges[base_record_location.range][base_record_location.page]
+            base_logical_page = self._page_ranges[base_record_location.range][base_record_location.page]
             try:
-                current_base_record = per_record_tobe_merge.read(base_record_location.offset)[self.internal_id(0):]
+                current_base_record = base_logical_page.read(base_record_location.offset)[self.internal_id(0):]
             except KeyError:
                 raise KeyError('check line 447, add sleep time')
-            if baseid in base_rid_tobe_changed:
-                merged_records.append(record_tobe_changed[baseid])
+
+            # Add replacement values to merged_records dict
+            # Or add original values for base records that don't need to be changed
+            if baseid in base_records_to_replace:
+                merged_records.append(replacement_records[baseid])
             else:
                 merged_records.append(current_base_record)
-        self._page_directory_reallocation(merged_records,_range,_tail_rid)
+
+        self._page_directory_reallocation(merged_records,_range,_last_tail_rid)
 
 
     def _page_directory_reallocation(self, records, __range,__tail__rid, verbose=False):
