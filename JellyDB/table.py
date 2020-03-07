@@ -68,7 +68,7 @@ class Table:
         # Attributes for merging
         self.current_tail_rid = 0
         self.current_base_rid = 0
-        self.check_merge = []
+        self.ranges_with_full_base = []
         self.TPS = [None]
         self.merge_queue = collections.deque()
         self.allocate_ephemeral_structures()
@@ -279,15 +279,13 @@ class Table:
         # Track current base RID
         self.current_base_rid = RID
 
-        # Check if the output is integer
+        # If base page is full, add to list of base pages ready to merge
+        # Also, since a new page was created, add another value to TPS list
         if (self.current_base_rid % Config.TOTAL_RECORDS_FULL) == 0:
             if verbose: print("Table insert says: Base page full")
-            # List of base pages ready to merge
-            # Initializing new TPS when there's a new page range
+            self.ranges_with_full_base.append([record_location.range,self.current_base_rid])
             self.TPS.append(None)
-            self.check_merge.append([record_location.range,self.current_base_rid])
-            #print(self.check_merge)
-            if verbose: print("Table insert says: Here is self.check_merge:", self.check_merge)
+            if verbose: print("Table insert says: Here is self.ranges_with_full_base:", self.ranges_with_full_base)
 
         #make sure left-over queues can be processed
 
@@ -482,21 +480,21 @@ class Table:
             if verbose:
                 print(self.current_tail_rid)
             #print(current_update_loc.range,'pagerange',len(self._page_ranges))
-            self.merge_queue.appendleft([current_update_loc.range,current_update_loc.page,self.current_tail_rid])
+            self.merge_queue.appendleft([current_update_loc.range, current_update_loc.page, self.current_tail_rid])
             #print('q',len(self.merge_queue))
 
+        # If there are tail pages to be merged
         if self.merge_queue:
-            #not empty
             if threading.activeCount() == 1:
                 for i in range(len(self.merge_queue)):
                     found = False
                     try:
                         if verbose:
                             print(self.merge_queue[-1])
-                            print(self.check_merge[self.merge_queue[-1][0]][0])
+                            print(self.ranges_with_full_base[self.merge_queue[-1][0]][0])
 
                         #full base pages and one tail page are both full in the same page range
-                        if self.merge_queue[-1][0] == self.check_merge[self.merge_queue[-1][0]][0]:
+                        if self.merge_queue[-1][0] == self.ranges_with_full_base[self.merge_queue[-1][0]][0]:
                             found = True
                             break
 
@@ -611,7 +609,9 @@ class Table:
             print("i'm in process to merge",threading.current_thread().name)
 
         # Loop forwards through base records in range
-        for baseid in range(self.check_merge[_range][-1]-Config.TOTAL_RECORDS_FULL+1, self.check_merge[_range][-1]+1):
+        first_base_rid = self._page_ranges[_range][0].base_RID
+        last_base_rid = self._page_ranges[_range][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE-1].bound_RID
+        for baseid in range(first_base_rid, last_base_rid + 1):
             # Get current base record values
             base_record_location = self.get_record_location(baseid)
             base_logical_page = self._page_ranges[base_record_location.range][base_record_location.page]
