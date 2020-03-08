@@ -11,6 +11,22 @@ class RIDAllocator:
         self.lock = threading.Lock()
     
     """
+    # Called when pickled (warning, this does not preserve the state of the lock)
+    # https://stackoverflow.com/questions/50441786/pickle-cant-pickle-thread-lock-objects
+    """
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['lock']
+        return state
+    
+    """
+    # Called when unpickled (warning, this does not preserve the state of the lock)
+    """
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.lock = threading.Lock()
+    
+    """
     :param filename: str    # The filename that this new page range should have - of the form "TableName-index"
     :param col_count: int   # The number of columns in each page in this range
     """

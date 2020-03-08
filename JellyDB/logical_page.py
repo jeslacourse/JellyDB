@@ -15,6 +15,7 @@ class LogicalPage:
         self.tablename = table
         self.bufferpool_= bufferpool
         self.capacity = self.bound_RID - self.base_RID
+        self.record_count = 0
 
         # Create new array of Page objects, one per col
         self.pages = []
@@ -67,3 +68,14 @@ class LogicalPage:
     """
     def update_indirection_column(self, offset: int, value: int):
         self.pages[Config.INDIRECTION_COLUMN_INDEX].write(value, offset)
+    
+    """
+    :returns: int   # if all RIDs in this page have been given to records, this value is 0. Otherwise, it is the RID of the next available RID in this page.
+    """
+    def first_available_rid(self) -> int:
+        if not self.has_capacity():
+            return 0
+        return self.base_RID + self.record_count
+    
+    def has_capacity(self) -> bool:
+        return self.record_count < self.capacity 

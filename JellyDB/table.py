@@ -276,16 +276,18 @@ class Table:
 
     def _allocate_first_available_base_RID(self):
         # Add new page range if necessary
-        if not self._page_ranges[-1][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE - 1].has_capacity():
-            self._add_page_range()
-        destination_page_range = self._page_ranges[-1]
+        with self._RID_allocator.lock.acquire():
+            if not self._page_ranges[-1][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE - 1].has_capacity():
+                self._add_page_range()
+            destination_page_range = self._page_ranges[-1]
 
-        for i in range(Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):
-            first_available_RID_in_this_page = destination_page_range[i].first_available_RID()
-            if first_available_RID_in_this_page != 0: # page not full
-                return first_available_RID_in_this_page
+            for i in range(Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):
+                first_available_RID_in_this_page = destination_page_range[i].first_available_RID()
+                if first_available_RID_in_this_page != 0: # page not full
+                    destination_page_range[i].record_count += 1 # reserve space for one record in this page.
+                    return first_available_RID_in_this_page
 
-        raise Exception("Something went wrong; failed to allocate enough space")
+            raise Exception("Something went wrong; failed to allocate enough space")
 
 
     """

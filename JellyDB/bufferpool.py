@@ -12,17 +12,20 @@ import os
 # You must call "open" before using this class.
 class Bufferpool:
     def __init__(self):
-        self.lock = threading.RLock() # Using RLock allows us to have one function that needs the lock call another that needs the lock
-    
+        pass 
+
     def _allocate_members(self):
         self.data = []
         # map from PhysicalPageLocation to page's location within `self.data`
         self.where_to_find_page_in_pool = {}
         self.lru_tracker = []
+        self.lock = threading.RLock() # Using RLock allows us to have one function that needs the lock call another that needs the lock
     
     def _deallocate_members(self):
         self.data = None
         self.where_to_find_page_in_pool = None
+        self.lru_tracker = None
+        self.lock = None
     
     """
     # Looks at how big the file is (i.e. how many pages have been stored there

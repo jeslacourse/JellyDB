@@ -16,6 +16,22 @@ class XSLock:
             print("An exception of type {} with value {} and traceback {} should just have been raised. If it wasn't, raise an exception in __exit__ of XSLock. If it was, remove the if clause that printed this message.".format(exception_type, exception_value, traceback))
         self.release()
     
+    """
+    # Called when pickled (warning, this does not change any counters)
+    # https://stackoverflow.com/questions/50441786/pickle-cant-pickle-thread-lock-objects
+    """
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['_lock']
+        return state
+    
+    """
+    # Called when unpickled (warning, this does not change any counters)
+    """
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
+    
     # Returns itself
     def acquire_X(self) -> XSLock:
         if self.acquire_X_bool() == False:
