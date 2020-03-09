@@ -2,6 +2,7 @@ from JellyDB.table import Table, Record
 import inspect
 from JellyDB.query import Query
 #from JellyDB.index import Index
+import threading
 
 class Transaction:
 
@@ -10,7 +11,7 @@ class Transaction:
     """
     def __init__(self):
         self.queries = []
-        pass
+        self.committed_update_record_location = []
 
     """
     # Adds the given query to this transaction
@@ -24,27 +25,39 @@ class Transaction:
 
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
+        #print(self.queries)
+        #print(len(self.queries), threading.current_thread().name)
         for query, args in self.queries:
             result = query(*args)
             # If the query has failed the transaction should abort
             # writing queries returns record location
+
             if result == False:
                 return self.abort(query, args)
             else:
-                return self.commit(query, args, result)
+                if query.__name__ == 'increment':
+                    #print('in transaction line 39',result)
+                    self.committed_update_record_location.append(result)
+        #print('finished pre_check')
+        return self.commit()
 
     def abort(self,query,args):
-        #TODO: do roll-back and any other necessary operations
-        index_for_query = self.queries.index((query, args))
-        del self.queries[index_for_query]
+        if self.committed_update_record_location != []:
+            for items in self.committed_update_record_location:
+                query(*args,loc = items, abort = True)
+            self.committed_update_record_location.clear()
         return False
 
-    def commit(self,query, args, result_location):
-        # TODO: commit to database
-        index_for_query = self.queries.index((query, args))
-        if query.__name__ == 'increment':
-            result = query(*args, loc = result_location, commit = True)
-        else:
-            pass
-        del self.queries[index_for_query]
+    def commit(self):
+        #index_for_query = self.queries.index((query, args))
+        #print(index_for_query)
+        #print(query.__name__, type(query.__name__))
+        count = 0
+        for query, args in self.queries:
+            #print(query.__name__)
+            if query.__name__ == 'increment':
+                result = query(*args, loc = self.committed_update_record_location[count], commit = True)
+                count+=1
         return True
+
+        #del self.queries[index_for_query]

@@ -403,18 +403,28 @@ class Table:
             return target_loc
 
 
-    def update(self, target_location, verbose=False):
+    def update(self, key,columns:tuple, target_location, verbose=False):
         #if verbose: print("Table says I'm updating at", process_time())
         # Get RID of record to update
-        print("I'm committed update")
-        #[(key,column),target_loc]
+        #print("I'm committed update")
+        #target_RIDs = self._indices.locate(self.internal_id(self._key), key)
         target_loc = target_location
+        target_RID = self.get_rid(target_loc.range,target_loc.page, target_loc.offset)
+        #target_base_RID = target_RIDs[-1]
+        #[(key,column),target_loc]
+        target_base_RID = target_RID
+        loc = self.get_record_location(target_RID)
+        print(loc,target_loc)
+        if loc == target_loc:
+            pass
+        else:
+            return 'something went wrong in line 420'
+        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
+
         current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)
-        columns = current_uRID.get_list_value()[0]
-        print(columns)
+        #print(columns)
         #returns [(column tuple)]
 
-        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
         current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
         self.assert_not_deleted(current_indirection)
 
@@ -706,3 +716,16 @@ class Table:
 
     def delete_all_files_owned_in(self, path_to_db_files: str):
         PhysicalPageLocation.delete_table_files(path_to_db_files, self._name, len(self._page_ranges))
+
+    def reset_uRID(self,record_location):
+        target_loc = record_location
+        logical_page_of_target_to_abort = self._page_ranges[target_loc.range][target_loc.page]
+        logical_page_of_target_to_abort.update_uRID(target_loc.offset, 0)
+
+    def get_rid(self,pagerange, pageid,offset):
+        listOfKeys = None
+        listOfItems = self._page_directory.items()
+        for item in listOfItems:
+            if item[1] == (pagerange, pageid):
+                listOfKeys == item[0]
+        return listOfKeys+offset
