@@ -1,5 +1,7 @@
 from JellyDB.table import Table, Record
-from JellyDB.index import Index
+import inspect
+from JellyDB.query import Query
+#from JellyDB.index import Index
 
 class Transaction:
 
@@ -25,14 +27,24 @@ class Transaction:
         for query, args in self.queries:
             result = query(*args)
             # If the query has failed the transaction should abort
+            # writing queries returns record location
             if result == False:
-                return self.abort()
-        return self.commit()
+                return self.abort(query, args)
+            else:
+                return self.commit(query, args, result)
 
-    def abort(self):
+    def abort(self,query,args):
         #TODO: do roll-back and any other necessary operations
+        index_for_query = self.queries.index((query, args))
+        del self.queries[index_for_query]
         return False
 
-    def commit(self):
+    def commit(self,query, args, result_location):
         # TODO: commit to database
+        index_for_query = self.queries.index((query, args))
+        if query.__name__ == 'increment':
+            result = query(*args, loc = result_location, commit = True)
+        else:
+            pass
+        del self.queries[index_for_query]
         return True

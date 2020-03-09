@@ -243,12 +243,12 @@ class Table:
         # Prepend metadata to columns
         # Since this is a new base record, set indirection to 0
         # Base RID metadatacolumn will be 0
-        record_with_metadata = [0, time_ns(), 0, *columns]
+        record_with_metadata = [0, time_ns(), 0, 0, *columns]
 
         # Get next base rid, find what page it belongs to, and write the record to that page
         RID = self._allocate_first_available_base_RID()
         record_location = self.get_record_location(RID)
-        self._page_ranges[record_location.range][record_location.page].write(record_with_metadata, record_location.offest)
+        self._page_ranges[record_location.range][record_location.page].write(record_with_metadata, record_location.offset)
 
         # Create entry for this record in index(es)
         for i in range(self.internal_id(0), self.internal_id(self._num_content_columns)):
@@ -380,24 +380,44 @@ class Table:
     :param key: int   # value in the primary key column of the record we are updating
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
-    def update(self, key: int, columns: tuple, verbose=False):
-        #if verbose: print("Table says I'm updating at", process_time())
-
-        # Get RID of record to update
+    def pre_update(self, key:int,columns: tuple):
+        #uncommitted_record = Node(columns)
+        #locate record in current base page
         target_RIDs = self._indices.locate(self.internal_id(self._key), key)
         target_RID = target_RIDs[0]
-        # Get the base_rid for tail record metadata update
         target_base_RID = target_RIDs[-1]
-
-        # Find which logical page record lives on
         target_loc = self.get_record_location(target_RID)
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
-
-        # Get the most updated logical page
-        # This will be a base page if no updates have happened yet
-        # Or will be a tail page if it has been updated
         current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
         self.assert_not_deleted(current_indirection)
+        current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)
+        if current_uRID != 0:
+            return False #arbitrary write lock on that record
+        else:
+            #new_uRID = uRID(Node(threading.current_thread().name[-1]))
+            #new_uRID.head.setNext(uncommitted_record)
+            #uncommitted_record.setNext(target_loc)
+            #target_loc.setNext(logical_page_of_target)
+            #print("I'm locking update,", threading.current_thread().name)
+            logical_page_of_target.update_uRID(target_loc.offset, 1)
+            return target_loc
+
+
+    def update(self, target_location, verbose=False):
+        #if verbose: print("Table says I'm updating at", process_time())
+        # Get RID of record to update
+        print("I'm committed update")
+        #[(key,column),target_loc]
+        target_loc = target_location
+        current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)
+        columns = current_uRID.get_list_value()[0]
+        print(columns)
+        #returns [(column tuple)]
+
+        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
+        current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
+        self.assert_not_deleted(current_indirection)
+
 
         # Base page is already merged, no need to look at tail page
         if self.TPS[target_loc.range] is not None \
@@ -450,9 +470,13 @@ class Table:
 
         # Track current tail rid
         self.current_tail_rid = tail_RID_of_current_update
-
+        self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update, current_update_loc.offset)
+        print('update lock released')
+        '''release arbitrary write lock'''
+        logical_page_of_target.update_uRID(target_loc.offset, 0)
+        '''
         #preventing main_thread accessing the same resource the _page_directory_reallocation is locking at the same time
-        '''Important: if KeyError pops out, increase the time.sleep duration!'''
+        #Important: if KeyError pops out, increase the time.sleep duration!
         try:
             if threading.activeCount() >1:
                 time.sleep(0.05)
@@ -499,7 +523,7 @@ class Table:
         else:
             #empty
             pass
-
+            '''
     """
     # Convenience method to replace one value in an index with another
     :param internal_col: int    # Column number seen inside the table, which means taking into account metadata columns

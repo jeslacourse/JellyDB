@@ -67,3 +67,6 @@ class LogicalPage:
     """
     def update_indirection_column(self, offset: int, value: int):
         self.pages[Config.INDIRECTION_COLUMN_INDEX].write(value, offset)
+
+    def update_uRID(self, offset:int, linked_list):
+        self.pages[Config.URID_INDEX].write(linked_list, offset)

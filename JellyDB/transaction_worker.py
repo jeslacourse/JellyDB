@@ -1,5 +1,5 @@
 from JellyDB.table import Table, Record
-from JellyDB.index import Index
+from JellyDB.indices import Indices
 
 class TransactionWorker:
 
@@ -10,6 +10,7 @@ class TransactionWorker:
         self.stats = []
         self.transactions = transactions
         self.result = 0
+        #add_transaction(self.transactions)
         pass
 
     def add_transaction(self, t):
