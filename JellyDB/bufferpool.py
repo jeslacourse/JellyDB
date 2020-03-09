@@ -129,23 +129,17 @@ class Bufferpool:
         for buffered_page in self.data:
             if buffered_page.valid and buffered_page.dirty:
                 buffered_page.flush_to_disk()
-    
-    def close(self):
-        self.lock.acquire()
 
+    def close(self):
         self._flush_all_data_to_disk()
         self._deallocate_members()
 
-        self.lock.release()
-    
+
     # When db.open
     def open(self, path: str):
-        self.lock.acquire()
-
         self._allocate_members()
         self.path_to_db_files = path
 
-        self.lock.release()
 
     def invalidate_pages_of(self, table: str):
         self.lock.acquire()

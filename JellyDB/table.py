@@ -58,11 +58,12 @@ class Table:
         # List of values, one for each page range
         self._next_tail_RID_to_allocate = []
 
+        self._page_directory_lock = XSLock()
+
         # Initialize list of page ranges then create first range
         self._page_ranges = []
         self._add_page_range()
 
-        self._page_directory_lock = XSLock()
         # self._page_directory is a Dictionary of representative rid --> (page range, page no. within range)
         self._recreate_page_directory()
 
@@ -248,7 +249,7 @@ class Table:
         # Get next base rid, find what page it belongs to, and write the record to that page
         RID = self._allocate_first_available_base_RID()
         record_location = self.get_record_location(RID)
-        self._page_ranges[record_location.range][record_location.page].write(record_with_metadata, record_location.offest)
+        self._page_ranges[record_location.range][record_location.page].write(record_with_metadata, record_location.offset)
 
         # Create entry for this record in index(es)
         for i in range(self.internal_id(0), self.internal_id(self._num_content_columns)):
@@ -276,7 +277,7 @@ class Table:
 
     def _allocate_first_available_base_RID(self):
         # Add new page range if necessary
-        with self._RID_allocator.lock.acquire():
+        with self._RID_allocator.lock:
             if not self._page_ranges[-1][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE - 1].has_capacity():
                 self._add_page_range()
             destination_page_range = self._page_ranges[-1]
@@ -518,17 +519,16 @@ class Table:
     # written into, creating a new tail page if necessary. Must be atomic!
     """
     def _allocate_next_available_tail_RID(self, target_page_range: int):
-        self._RID_allocator.lock.acquire() # no one else allocating any RIDs
-        first_available_spot = self._next_tail_RID_to_allocate[target_page_range]
-        if first_available_spot == 0:
-            self._add_tail_page(target_page_range)
-            first_available_spot = self._page_ranges[target_page_range][-1].base_RID
-        next_available_spot = first_available_spot + 1
-        if next_available_spot > self._page_ranges[target_page_range][-1].bound_RID:
-            next_available_spot = 0 # NO SPACE LEFT on current tail page
-        self._next_tail_RID_to_allocate[target_page_range] = next_available_spot
-        self._RID_allocator.lock.release()
-        return first_available_spot
+        with self._RID_allocator.lock: # no one else allocating any RIDs
+            first_available_spot = self._next_tail_RID_to_allocate[target_page_range]
+            if first_available_spot == 0:
+                self._add_tail_page(target_page_range)
+                first_available_spot = self._page_ranges[target_page_range][-1].base_RID
+            next_available_spot = first_available_spot + 1
+            if next_available_spot > self._page_ranges[target_page_range][-1].bound_RID:
+                next_available_spot = 0 # NO SPACE LEFT on current tail page
+            self._next_tail_RID_to_allocate[target_page_range] = next_available_spot
+            return first_available_spot
 
     """
     :param start_range: int              # Start of the key range to aggregate

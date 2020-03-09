@@ -1,5 +1,6 @@
 from __future__ import annotations
 import threading
+import traceback
 
 class XSLock:
     def __init__(self):
@@ -10,10 +11,8 @@ class XSLock:
     def __enter__(self):
         # Used with `with` statement. The lock will already have been acquired when this is called.
         return self
-    
-    def __exit__(self, exception_type, exception_value, traceback):
-        if exception_type is not None:
-            print("An exception of type {} with value {} and traceback {} should just have been raised. If it wasn't, raise an exception in __exit__ of XSLock. If it was, remove the if clause that printed this message.".format(exception_type, exception_value, traceback))
+
+    def __exit__(self, exception_type, exception_value, __traceback):
         self.release()
     
     """

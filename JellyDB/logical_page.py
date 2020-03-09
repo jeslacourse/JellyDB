@@ -72,7 +72,7 @@ class LogicalPage:
     """
     :returns: int   # if all RIDs in this page have been given to records, this value is 0. Otherwise, it is the RID of the next available RID in this page.
     """
-    def first_available_rid(self) -> int:
+    def first_available_RID(self) -> int:
         if not self.has_capacity():
             return 0
         return self.base_RID + self.record_count
