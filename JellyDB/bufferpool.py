@@ -2,6 +2,7 @@ from JellyDB.page_utils import PageUtils
 from JellyDB.config import Config
 from JellyDB.physical_page_location import PhysicalPageLocation
 from JellyDB.buffered_page import BufferedPage
+import threading
 import os
 
 # This provides Page objects with access to their buffers without letting them
@@ -11,17 +12,20 @@ import os
 # You must call "open" before using this class.
 class Bufferpool:
     def __init__(self):
-        pass
-    
+        pass 
+
     def _allocate_members(self):
         self.data = []
         # map from PhysicalPageLocation to page's location within `self.data`
         self.where_to_find_page_in_pool = {}
         self.lru_tracker = []
+        self.lock = threading.RLock() # Using RLock allows us to have one function that needs the lock call another that needs the lock
     
     def _deallocate_members(self):
         self.data = None
         self.where_to_find_page_in_pool = None
+        self.lru_tracker = None
+        self.lock = None
     
     """
     # Looks at how big the file is (i.e. how many pages have been stored there
@@ -43,26 +47,31 @@ class Bufferpool:
         page.transactions_using += 1
     
     def unpin(self, physical_page_location: PhysicalPageLocation): # a PhysicalPageLocation will be given upon a call to allocate_page_id()
-        target = self._get_page(physical_page_location, False)
-        if (target.transactions_using <= 0):
-            raise Exception("The page {} has been unpinned more times than it has been pinned.".format(physical_page_location))
-        target.transactions_using -= 1
+        with self.lock:
+            target = self._get_page(physical_page_location, False)
+            if (target.transactions_using <= 0):
+                self.lock.release()
+                raise Exception("The page {} has been unpinned more times than it has been pinned.".format(physical_page_location))
+            target.transactions_using -= 1
 
     def write(self, physical_page_location: PhysicalPageLocation, value: int, index: int):
-        buffered_page = self._get_page(physical_page_location, True)
-        self.pin(buffered_page)
+        with self.lock: # Make sure page is ABSOLUTELY in the bufferpool; pin it so it can't leave
+            buffered_page = self._get_page(physical_page_location, True)
+            self.pin(buffered_page)
         PageUtils.write(buffered_page.data, value, index)
         buffered_page.dirty = True
         self.unpin(physical_page_location)
     
     def read(self, physical_page_location: PhysicalPageLocation, offset_within_page: int) -> int:
-        buffered_page = self._get_page(physical_page_location, True)
-        self.pin(buffered_page)
+        with self.lock: # make sure that the page is ABSOLUTELY in the bufferpool; pin it so it can't leave
+            buffered_page = self._get_page(physical_page_location, True)
+            self.pin(buffered_page)
+        # now that it is pinned, it won't leave
         val = PageUtils.get_record(buffered_page.data, offset_within_page)
         self.unpin(physical_page_location)
         return val
     
-    def _get_frame_number_for_page(self, physical_page_location: PhysicalPageLocation) -> int:
+    def _get_frame_number_for_page(self, physical_page_location: PhysicalPageLocation) -> int: # must be atomic because an encapsulating function (_get_page) must be atomic
         if physical_page_location not in self.where_to_find_page_in_pool:
             return self._load_into_memory(physical_page_location)
         return self.where_to_find_page_in_pool[physical_page_location]
@@ -70,7 +79,7 @@ class Bufferpool:
     """
     # Updates the frames' LRU
     """
-    def _get_page(self, physical_page_location: PhysicalPageLocation, update_LRU: bool) -> BufferedPage:
+    def _get_page(self, physical_page_location: PhysicalPageLocation, update_LRU: bool) -> BufferedPage: # must be atomic because the loading & pinning processe is atomic
         frame = self._get_frame_number_for_page(physical_page_location)
         if update_LRU:
             if frame in self.lru_tracker: # This "if" allows for the case when a frame has just been created and is not in the list
@@ -81,16 +90,16 @@ class Bufferpool:
     """
     :returns:   # Frame number where the requested page has been loaded
     """
-    def _load_into_memory(self, physical_page_location: PhysicalPageLocation) -> int:
-        frame_where_new_page_belongs = self.find_a_free_frame()
+    def _load_into_memory(self, physical_page_location: PhysicalPageLocation) -> int: # must be atomic
+        frame_where_new_page_belongs = self._find_a_free_frame()
         page = self.data[frame_where_new_page_belongs]
         page.set_new_page(physical_page_location)
         self.where_to_find_page_in_pool[physical_page_location] = frame_where_new_page_belongs
         return frame_where_new_page_belongs
     
-    def find_a_free_frame(self) -> int:
+    def _find_a_free_frame(self) -> int: # must be atomic - the index returned must be accurate
         if len(self.data) >= Config.BUFFERPOOL_SIZE_IN_PAGES:
-            return self.evict_least_recently_used_page()
+            return self._evict_least_recently_used_page()
         else:
             index_of_new_frame = len(self.data)
             self.data.append(BufferedPage(None))
@@ -100,8 +109,8 @@ class Bufferpool:
     """
     # Only call if bufferpool size is > 0.
     """
-    def evict_least_recently_used_page(self) -> int:
-        frame_of_page_to_evict = self.get_index_of_LRU_page_we_can_evict()
+    def _evict_least_recently_used_page(self) -> int: # must be atomic
+        frame_of_page_to_evict = self._get_index_of_LRU_page_we_can_evict()
         page_to_evict = self.data[frame_of_page_to_evict]
         if page_to_evict.valid and page_to_evict.dirty:
             page_to_evict.flush_to_disk()
@@ -110,27 +119,31 @@ class Bufferpool:
         
         return frame_of_page_to_evict
     
-    def get_index_of_LRU_page_we_can_evict(self):
+    def _get_index_of_LRU_page_we_can_evict(self): # must be atomic
         for i in self.lru_tracker:
             if (self.data[i]).transactions_using == 0:
                 return i
         raise Exception("All frames are pinned")
     
-    def flush_all_data_to_disk(self):
+    def _flush_all_data_to_disk(self): # must be atomic
         for buffered_page in self.data:
             if buffered_page.valid and buffered_page.dirty:
                 buffered_page.flush_to_disk()
-    
+
     def close(self):
-        self.flush_all_data_to_disk()
+        self._flush_all_data_to_disk()
         self._deallocate_members()
-    
+
+
     # When db.open
     def open(self, path: str):
         self._allocate_members()
         self.path_to_db_files = path
 
+
     def invalidate_pages_of(self, table: str):
+        self.lock.acquire()
+
         for page in self.data:
             if page.valid and page.physical_page_location.table == table:
                 if page.transactions_using > 0:
@@ -138,3 +151,5 @@ class Bufferpool:
                         "cannot invalidate page {} in bufferpool; {} transactions are using it".format(str(page), str(page.transactions_using))
                     )
                 page.valid = False
+
+        self.lock.release()
