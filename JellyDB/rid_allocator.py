@@ -8,8 +8,8 @@ class RIDAllocator:
         self.bufferpool = bufferpool
         self.nextRIDToAssign = Config.START_RID
         self.nextTailRIDToAssign = Config.START_TAIL_RID
-        self.lock = threading.Lock()
     
+        self.lock = threading.RLock()
     """
     # Called when pickled (warning, this does not preserve the state of the lock)
     # https://stackoverflow.com/questions/50441786/pickle-cant-pickle-thread-lock-objects

@@ -626,13 +626,12 @@ class Table:
         #print(records)
         #self.lock = None
     def _add_page_range(self):
-        self._RID_allocator.lock.acquire()
-        self._page_ranges.append(
-            self._RID_allocator.make_page_range(self._name, len(self._page_ranges), self._num_columns)
-        )
-        # keep track of the first tail RID in this new page range
-        self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
-        self._RID_allocator.lock.release()
+        with self._RID_allocator.lock:
+            self._page_ranges.append(
+                self._RID_allocator.make_page_range(self._name, len(self._page_ranges), self._num_columns)
+            )
+            # keep track of the first tail RID in this new page range
+            self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
         self._recreate_page_directory()
 
     """
