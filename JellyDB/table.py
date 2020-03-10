@@ -580,7 +580,14 @@ class Table:
         # Loop backwards through tail records in range
         for rid in range(_last_tail_rid, _last_tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
             # Get tail record values and corresponding base rid
-            tail_record_location = self.get_record_location(rid)
+            while True:
+                try:
+                    tail_record_location = self.get_record_location(rid)
+                    break
+                except:
+                    print("table.merge (tail section) spinning on page directory lock")
+                    raise Exception
+                    continue
             current_tail_page = self._page_ranges[tail_record_location.range][tail_record_location.page]
             corresponding_base_rid = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
 
@@ -598,7 +605,14 @@ class Table:
         last_base_rid = self._page_ranges[_range][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE-1].bound_RID
         for baseid in range(first_base_rid, last_base_rid + 1):
             # Get current base record values
-            base_record_location = self.get_record_location(baseid)
+            while True:
+                try:
+                    base_record_location = self.get_record_location(baseid)
+                    break
+                except:
+                    print("table.merge (base section) spinning on page directory lock")
+                    raise Exception
+                    continue
             base_logical_page = self._page_ranges[base_record_location.range][base_record_location.page]
             try:
                 current_base_record = base_logical_page.read(base_record_location.offset)[self.internal_id(0):]
@@ -634,7 +648,14 @@ class Table:
                 #reading at logical pages always return first serveral columns, metadata + userdefined columns
                 #so merged columns inserted will be directly detected.
             self.TPS[__range] = __tail__rid-Config.MAX_RECORDS_PER_PAGE+1
-            self._recreate_page_directory()
+            while True:
+                try:
+                    self._recreate_page_directory()
+                    break
+                except:
+                    print("table._page_directory_reallocation spinning on page directory lock")
+                    raise Exception
+                    continue
         if verbose: print('Table page directory reallocation says: I finished updating, you can go', process_time())
         #print(records)
         #self.lock = None
@@ -654,7 +675,14 @@ class Table:
         self._page_ranges[page_range].append(
             self._RID_allocator.make_tail_page(self._name, page_range, self._num_columns)
         )
-        self._recreate_page_directory() # TODO does the page directory need to have a lock? I think so
+        while True:
+            try:
+                self._recreate_page_directory() # TODO does the page directory need to have a lock? I think so
+                break
+            except:
+                print("table._add_tail_page spinning on page directory lock")
+                raise Exception
+                continue
 
     """
     # There are 4096 RIDs that might be the base RID for the page this RID is
