@@ -8,8 +8,24 @@ class RIDAllocator:
         self.bufferpool = bufferpool
         self.nextRIDToAssign = Config.START_RID
         self.nextTailRIDToAssign = Config.START_TAIL_RID
+
+        self.lock = threading.RLock()
+    """
+    # Called when pickled (warning, this does not preserve the state of the lock)
+    # https://stackoverflow.com/questions/50441786/pickle-cant-pickle-thread-lock-objects
+    """
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['lock']
+        return state
+
+    """
+    # Called when unpickled (warning, this does not preserve the state of the lock)
+    """
+    def __setstate__(self, state):
+        self.__dict__.update(state)
         self.lock = threading.Lock()
-    
+
     """
     :param filename: str    # The filename that this new page range should have - of the form "TableName-index"
     :param col_count: int   # The number of columns in each page in this range
@@ -33,7 +49,7 @@ class RIDAllocator:
         if self.nextRIDToAssign > self.nextTailRIDToAssign:
             raise Exception("Address space full")
         return LogicalPage(table, __range, col_count, base, bound, self.bufferpool)
-    
+
     """
     # Allocates a tail page with its own unique RID range
     :returns:   # tuple, (lowest RID allocated, highest RID allocated)
@@ -45,5 +61,3 @@ class RIDAllocator:
         if self.nextTailRIDToAssign < self.nextRIDToAssign:
             raise Exception("Address space full")
         return LogicalPage(table, __range, col_count, base, bound, self.bufferpool)
-
-        

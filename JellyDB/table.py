@@ -11,6 +11,7 @@ from time import process_time
 import time
 import collections
 
+
 """
 # the page directory should map from RIDs to this
 """
@@ -60,21 +61,22 @@ class Table:
 
         # Initialize list of page ranges then create first range
         self._page_ranges = []
+        self._page_directory_lock = XSLock()
         self._add_page_range()
 
-        self._page_directory_lock = XSLock()
         # self._page_directory is a Dictionary of representative rid --> (page range, page no. within range)
         self._recreate_page_directory()
 
         # Attributes for merging
         self.current_tail_rid = 0
         self.current_base_rid = 0
-        self.check_merge = []
+        self.ranges_with_full_base = []
         self.TPS = [None]
         self.merge_queue = collections.deque()
 
         self._indices = Indices()
         self._indices.create_index(self.internal_id(self._key))
+        self.update_lock = threading.Lock()
 
 
     """
@@ -267,9 +269,9 @@ class Table:
             # List of base pages ready to merge
             # Initializing new TPS when there's a new page range
             self.TPS.append(None)
-            self.check_merge.append([record_location.range,self.current_base_rid])
+            self.ranges_with_full_base.append([record_location.range,self.current_base_rid])
             #print(self.check_merge)
-            if verbose: print("Table insert says: Here is self.check_merge:", self.check_merge)
+            if verbose: print("Table insert says: Here is self.ranges_with_full_base:", self.ranges_with_full_base)
 
         #make sure left-over queues can be processed
 
@@ -385,7 +387,6 @@ class Table:
         #locate record in current base page
         target_RIDs = self._indices.locate(self.internal_id(self._key), key)
         target_RID = target_RIDs[0]
-        target_base_RID = target_RIDs[-1]
         target_loc = self.get_record_location(target_RID)
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
         current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
@@ -407,18 +408,14 @@ class Table:
         #if verbose: print("Table says I'm updating at", process_time())
         # Get RID of record to update
         #print("I'm committed update")
-        #target_RIDs = self._indices.locate(self.internal_id(self._key), key)
         target_loc = target_location
-        target_RID = self.get_rid(target_loc.range,target_loc.page, target_loc.offset)
-        #target_base_RID = target_RIDs[-1]
-        #[(key,column),target_loc]
+        target_RID = self.get_rid((target_loc.range,target_loc.page), target_loc.offset)
         target_base_RID = target_RID
-        loc = self.get_record_location(target_RID)
-        print(loc,target_loc)
-        if loc == target_loc:
-            pass
-        else:
-            return 'something went wrong in line 420'
+        #[(key,column),target_loc]
+        #loc = self.get_record_location(target_RID)
+        #target_base_RID = self.get_rid((loc.range,loc.page), loc.offset)
+
+        #print(loc,target_loc)
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
 
         current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)
@@ -481,7 +478,7 @@ class Table:
         # Track current tail rid
         self.current_tail_rid = tail_RID_of_current_update
         self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update, current_update_loc.offset)
-        print('update lock released')
+        #print('update lock released')
         '''release arbitrary write lock'''
         logical_page_of_target.update_uRID(target_loc.offset, 0)
         '''
@@ -498,7 +495,7 @@ class Table:
             if verbose:
                 print(self.current_tail_rid)
             #print(current_update_loc.range,'pagerange',len(self._page_ranges))
-            self.merge_queue.appendleft([current_update_loc.range,current_update_loc.page,self.current_tail_rid])
+            self.merge_queue.appendleft([current_update_loc.range, current_update_loc.page, self.current_tail_rid])
             #print('q',len(self.merge_queue))
 
         if self.merge_queue:
@@ -509,10 +506,10 @@ class Table:
                     try:
                         if verbose:
                             print(self.merge_queue[-1])
-                            print(self.check_merge[self.merge_queue[-1][0]][0])
+                            print(self.ranges_with_full_base[self.merge_queue[-1][0]][0])
 
                         #full base pages and one tail page are both full in the same page range
-                        if self.merge_queue[-1][0] == self.check_merge[self.merge_queue[-1][0]][0]:
+                        if self.merge_queue[-1][0] == self.ranges_with_full_base[self.merge_queue[-1][0]][0]:
                             found = True
                             break
 
@@ -599,39 +596,60 @@ class Table:
     def merge(self, tail_page_to_work_on, verbose=False):
         _range = tail_page_to_work_on[0]
         _page = tail_page_to_work_on[1]
-        _tail_rid = tail_page_to_work_on[2]
+        _last_tail_rid = tail_page_to_work_on[2]
 
-        base_rid_tobe_changed = []
-        record_tobe_changed = {}
+        base_records_to_replace = []
+        replacement_records = {}
         merged_records = []
-        if verbose: print(_tail_rid)
+        if verbose: print(_last_tail_rid)
         #count = 0
         #time.sleep(0.1)
 
-        for id in range(_tail_rid, _tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
-            #count +=1
-            tail_record_location = self.get_record_location(id)
+        # Loop backwards through tail records in range
+        for rid in range(_last_tail_rid, _last_tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
+            # Get tail record values and corresponding base rid
+            while True:
+                try:
+                    tail_record_location = self.get_record_location(rid)
+                    break
+                except:
+                    print("table.merge (tail section) spinning on page directory lock")
+                    raise Exception
+                    continue
             current_tail_page = self._page_ranges[tail_record_location.range][tail_record_location.page]
-            base_rid_unique = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
-            if base_rid_unique not in base_rid_tobe_changed:
-                base_rid_tobe_changed.append(base_rid_unique)
-                record_tobe_changed[base_rid_unique]=current_tail_page.read(tail_record_location.offset)[self.internal_id(0):]
+            corresponding_base_rid = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
+
+            # Save base rid to be changed to list
+            # Add tail record values to replacement records dictionary
+            if corresponding_base_rid not in base_records_to_replace:
+                base_records_to_replace.append(corresponding_base_rid)
+                replacement_records[corresponding_base_rid]=current_tail_page.read(tail_record_location.offset)[self.internal_id(0):]
 
         if verbose:
             print("i'm in process to merge",threading.current_thread().name)
-
+# Loop forwards through base records in range
         for baseid in range(self.check_merge[_range][-1]-Config.TOTAL_RECORDS_FULL+1, self.check_merge[_range][-1]+1):
-            base_record_location = self.get_record_location(baseid)
-            per_record_tobe_merge = self._page_ranges[base_record_location.range][base_record_location.page]
+            # Get current base record values
+            while True:
+                try:
+                    base_record_location = self.get_record_location(baseid)
+                    break
+                except:
+                    print("table.merge (base section) spinning on page directory lock")
+                    raise Exception
+                    continue
+            base_logical_page = self._page_ranges[base_record_location.range][base_record_location.page]
             try:
-                current_base_record = per_record_tobe_merge.read(base_record_location.offset)[self.internal_id(0):]
+                 current_base_record = base_logical_page.read(base_record_location.offset)[self.internal_id(0):]
             except KeyError:
                 raise KeyError('check line 447, add sleep time')
-            if baseid in base_rid_tobe_changed:
-                merged_records.append(record_tobe_changed[baseid])
+            # Add replacement values to merged_records dict
+            # Or add original values for base records that don't need to be changed
+            if baseid in base_records_to_replace:
+                merged_records.append(replacement_records[baseid])
             else:
                 merged_records.append(current_base_record)
-        self._page_directory_reallocation(merged_records,_range,_tail_rid)
+        self._page_directory_reallocation(merged_records,_range,_last_tail_rid)
 
 
     def _page_directory_reallocation(self, records, __range,__tail__rid, verbose=False):
@@ -653,7 +671,14 @@ class Table:
                 #reading at logical pages always return first serveral columns, metadata + userdefined columns
                 #so merged columns inserted will be directly detected.
             self.TPS[__range] = __tail__rid-Config.MAX_RECORDS_PER_PAGE+1
-            self._recreate_page_directory()
+            while True:
+                try:
+                    self._recreate_page_directory()
+                    break
+                except:
+                    print("table._page_directory_reallocation spinning on page directory lock")
+                    raise Exception
+                    continue
         if verbose: print('Table page directory reallocation says: I finished updating, you can go', process_time())
         #print(records)
         #self.lock = None
@@ -668,13 +693,20 @@ class Table:
         self._recreate_page_directory()
 
     """
-    :param page_range: int  # page range to add the tail page to. Only use this if you 
+    :param page_range: int  # page range to add the tail page to. Only use this if you
     """
     def _add_tail_page(self, page_range: int):
         self._page_ranges[page_range].append(
             self._RID_allocator.make_tail_page(self._name, page_range, self._num_columns)
         )
-        self._recreate_page_directory() # TODO does the page directory need to have a lock? I think so
+        while True:
+            try:
+                self._recreate_page_directory() # TODO does the page directory need to have a lock? I think so
+                break
+            except:
+                print("table._add_tail_page spinning on page directory lock")
+                raise Exception
+                continue
 
     """
     # There are 4096 RIDs that might be the base RID for the page this RID is
@@ -722,10 +754,11 @@ class Table:
         logical_page_of_target_to_abort = self._page_ranges[target_loc.range][target_loc.page]
         logical_page_of_target_to_abort.update_uRID(target_loc.offset, 0)
 
-    def get_rid(self,pagerange, pageid,offset):
+    def get_rid(self,pageidentity:tuple,offset):
         listOfKeys = None
         listOfItems = self._page_directory.items()
         for item in listOfItems:
-            if item[1] == (pagerange, pageid):
-                listOfKeys == item[0]
+            #print(item)
+            if item[1] == pageidentity:
+                listOfKeys = item[0]
         return listOfKeys+offset

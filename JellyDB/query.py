@@ -39,23 +39,18 @@ class Query:
             self.abort_in_table(loc_)
         else:
             if commit_ == False:
-                self.lock.acquire()
                 u = self.table.pre_update(key, columns)
                 if u is not False:
                     #u is location
                     #self.committed_update_record_location.append(u)
                     #print('check line 45',u)
-                    self.lock.release()
                     return u
                 else:
-                    self.lock.release()
                     return False
             #output will be [(key,columns)], list of tuples
             elif commit_ and (loc_ is not None):
-                self.lock.acquire()
                 #index_of_offsets_going_tobe_committed = self.committed_update_record_location.index(loc)
                 self.table.update(key,columns, loc_)
-                self.lock.release()
                 #self.committed_update_record_location = None
             else:
                 print('something went wrong')

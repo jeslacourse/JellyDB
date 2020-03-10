@@ -14,7 +14,8 @@ class LogicalPage:
         self.bound_RID = bound_RID
         self.tablename = table
         self.bufferpool_= bufferpool
-        self.capacity = self.bound_RID - self.base_RID
+        self.capacity = self.bound_RID - self.base_RID + 1
+        self.record_count = 0
 
         # Create new array of Page objects, one per col
         self.pages = []
@@ -46,7 +47,8 @@ class LogicalPage:
     """
     def write(self, record: list, index: int, verbose=False):
         if index >= self.capacity:
-            print(str(self.base_RID) + " " + str(self.bound_RID) + " " + str(index))
+            print("self.base_RID", self.base_RID, "self.bound_RID", \
+            self.bound_RID, "index", str(index), "self.capacity", self.capacity)
             raise Exception("Index out of bounds")
 
         # Loop through columns in record
@@ -68,5 +70,13 @@ class LogicalPage:
     def update_indirection_column(self, offset: int, value: int):
         self.pages[Config.INDIRECTION_COLUMN_INDEX].write(value, offset)
 
-    def update_uRID(self, offset:int, linked_list):
-        self.pages[Config.URID_INDEX].write(linked_list, offset)
+    """
+    :returns: int   # if all RIDs in this page have been given to records, this value is 0. Otherwise, it is the RID of the next available RID in this page.
+    """
+    def first_available_RID(self) -> int:
+        if not self.has_capacity():
+            return 0
+        return self.base_RID + self.record_count
+
+    def has_capacity(self) -> bool:
+        return self.record_count < self.capacity 
