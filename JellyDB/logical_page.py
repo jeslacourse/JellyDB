@@ -14,7 +14,7 @@ class LogicalPage:
         self.bound_RID = bound_RID
         self.tablename = table
         self.bufferpool_= bufferpool
-        self.capacity = self.bound_RID - self.base_RID
+        self.capacity = self.bound_RID - self.base_RID + 1
         self.record_count = 0
 
         # Create new array of Page objects, one per col
@@ -47,7 +47,8 @@ class LogicalPage:
     """
     def write(self, record: list, index: int, verbose=False):
         if index >= self.capacity:
-            print(str(self.base_RID) + " " + str(self.bound_RID) + " " + str(index))
+            print("self.base_RID", self.base_RID, "self.bound_RID", \
+            self.bound_RID, "index", str(index), "self.capacity", self.capacity)
             raise Exception("Index out of bounds")
 
         # Loop through columns in record
