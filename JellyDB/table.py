@@ -231,6 +231,8 @@ class Table:
             if self._indices.has_index(i):
                 self._indices.delete(i, record_with_metadata[i], target_RID)
 
+        return True
+
 
     """
     # Insert a record with specified columns
@@ -271,6 +273,7 @@ class Table:
             if verbose: print("Table insert says: Here is self.ranges_with_full_base:", self.ranges_with_full_base)
 
         #make sure left-over queues can be processed
+        return True
 
 
     def _allocate_first_available_base_RID(self):
