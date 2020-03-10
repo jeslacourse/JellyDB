@@ -79,4 +79,7 @@ class LogicalPage:
         return self.base_RID + self.record_count
 
     def has_capacity(self) -> bool:
-        return self.record_count < self.capacity 
+        return self.record_count < self.capacity
+
+    def update_uRID(self, offset:int, linked_list):
+        self.pages[Config.URID_INDEX].write(linked_list, offset)
