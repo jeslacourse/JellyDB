@@ -457,21 +457,15 @@ class Table:
         # Track current tail rid
         self.current_tail_rid = tail_RID_of_current_update
 
-        #preventing main_thread accessing the same resource the _page_directory_reallocation is locking at the same time
-        '''Important: if KeyError pops out, increase the time.sleep duration!'''
         try:
-            if threading.activeCount() >1:
-                time.sleep(0.05)
             self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update, current_update_loc.offset)
         except KeyError:
-            raise KeyError('check line 447, increase time.sleep duration!')
+            raise KeyError("If you are reading this, bufferpool is throwing a KeyError at table.update!")
 
         if ((Config.START_TAIL_RID-self.current_tail_rid) % Config.MAX_RECORDS_PER_PAGE) == 0:
             if verbose:
                 print(self.current_tail_rid)
-            #print(current_update_loc.range,'pagerange',len(self._page_ranges))
             self.merge_queue.appendleft([current_update_loc.range, current_update_loc.page, self.current_tail_rid])
-            #print('q',len(self.merge_queue))
 
         # If there are tail pages to be merged
         if self.merge_queue:
@@ -578,9 +572,6 @@ class Table:
         base_records_to_replace = []
         replacement_records = {}
         merged_records = []
-        if verbose: print(_last_tail_rid)
-        #count = 0
-        #time.sleep(0.1)
 
         # Loop backwards through tail records in range
         for rid in range(_last_tail_rid, _last_tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
@@ -609,7 +600,7 @@ class Table:
             try:
                 current_base_record = base_logical_page.read(base_record_location.offset)[self.internal_id(0):]
             except KeyError:
-                raise KeyError('check line 447, add sleep time')
+                raise KeyError("If you are reading this, bufferpool is throwing a KeyError at table.merge!")
 
             # Add replacement values to merged_records dict
             # Or add original values for base records that don't need to be changed
