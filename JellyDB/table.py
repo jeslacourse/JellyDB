@@ -76,8 +76,7 @@ class Table:
 
         self._indices = Indices()
         self._indices.create_index(self.internal_id(self._key))
-        self.update_lock = threading.Lock()
-
+        
 
     """
     # The users of our database only know about their data columns. Since we
@@ -283,12 +282,14 @@ class Table:
                 self._add_page_range()
             destination_page_range = self._page_ranges[-1]
 
-        for i in range(Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):
-            first_available_RID_in_this_page = destination_page_range[i].first_available_RID()
-            if first_available_RID_in_this_page != 0: # page not full
-                return first_available_RID_in_this_page
+            for i in range(Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE):
+                first_available_RID_in_this_page = destination_page_range[i].first_available_RID()
+                if first_available_RID_in_this_page != 0: # page not full
+                    destination_page_range[i].record_count += 1 # reserve space for one record in this page.
+                    return first_available_RID_in_this_page
 
-        raise Exception("Something went wrong; failed to allocate enough space")
+            raise Exception("Something went wrong; failed to allocate enough space")
+
 
 
     """
@@ -394,13 +395,10 @@ class Table:
         self.assert_not_deleted(current_indirection)
         current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)
         if current_uRID != 0:
+            #print('not get uRID', target_RIDs, threading.current_thread().name, key)
             return False #arbitrary write lock on that record
         else:
-            #new_uRID = uRID(Node(threading.current_thread().name[-1]))
-            #new_uRID.head.setNext(uncommitted_record)
-            #uncommitted_record.setNext(target_loc)
-            #target_loc.setNext(logical_page_of_target)
-            #print("I'm locking update,", threading.current_thread().name)
+            #print('I get urid',target_RIDs,threading.current_thread().name,key)
             logical_page_of_target.update_uRID(target_loc.offset, 1)
             return target_loc
 
@@ -627,7 +625,7 @@ class Table:
 
         if verbose:
             print("i'm in process to merge",threading.current_thread().name)
-# Loop forwards through base records in range
+        # Loop forwards through base records in range
         for baseid in range(self.check_merge[_range][-1]-Config.TOTAL_RECORDS_FULL+1, self.check_merge[_range][-1]+1):
             # Get current base record values
             while True:
@@ -689,6 +687,8 @@ class Table:
             )
             # keep track of the first tail RID in this new page range
             self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
+            #self.record_locks[len(self._page_ranges)] = None
+
         self._recreate_page_directory()
 
     """

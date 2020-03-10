@@ -57,7 +57,7 @@ class Query:
 
     def abort_in_table(self, location_):
         self.table.reset_uRID(location_)
-        print('finish abort (in query.py)')
+        #print('finish abort (in query.py)')
     """
     # See table.py.
     # This function is only called on the primary key. (Note from teaching staff)
