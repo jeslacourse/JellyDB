@@ -44,8 +44,8 @@ class Table:
 
         # Number of columns holding actual content
         self._num_content_columns = num_content_columns
-        # Same as above (variable name expected by tester.py)
-        self.num_columns = num_content_columns
+        # Variable name expected by tester.py, please don't use!!
+        self.num_columns = num_content_columns # DO NOT USE
         # Total number of columns, including metadata
         self._num_columns = num_content_columns + Config.METADATA_COLUMN_COUNT
 
@@ -272,7 +272,6 @@ class Table:
             self.TPS.append(None)
             if verbose: print("Table insert says: Here is self.ranges_with_full_base:", self.ranges_with_full_base)
 
-        #make sure left-over queues can be processed
         return True
 
 
@@ -672,7 +671,7 @@ class Table:
         self._recreate_page_directory()
 
     """
-    :param page_range: int  # page range to add the tail page to. Only use this if you 
+    :param page_range: int  # page range to add the tail page to.
     """
     def _add_tail_page(self, page_range: int):
         self._page_ranges[page_range].append(
