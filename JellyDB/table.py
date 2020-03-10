@@ -60,6 +60,9 @@ class Table:
 
         self._page_directory_lock = XSLock()
 
+        # set to True to see messages every time a method spins on a lock
+        self.spin_messages = False
+
         # Initialize list of page ranges then create first range
         self._page_ranges = []
         self._add_page_range()
@@ -582,14 +585,8 @@ class Table:
         # Loop backwards through tail records in range
         for rid in range(_last_tail_rid, _last_tail_rid-Config.MAX_RECORDS_PER_PAGE,-1):
             # Get tail record values and corresponding base rid
-            while True:
-                try:
-                    tail_record_location = self.get_record_location(rid)
-                    break
-                except:
-                    print("table.merge (tail section) spinning on page directory lock")
-                    raise Exception
-                    continue
+            tail_record_location = self.get_record_location(rid)
+
             current_tail_page = self._page_ranges[tail_record_location.range][tail_record_location.page]
             corresponding_base_rid = current_tail_page.get(Config.BASE_RID_FOR_TAIL_PAGE_INDEX, tail_record_location.offset)
 
@@ -607,14 +604,7 @@ class Table:
         last_base_rid = self._page_ranges[_range][Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE-1].bound_RID
         for baseid in range(first_base_rid, last_base_rid + 1):
             # Get current base record values
-            while True:
-                try:
-                    base_record_location = self.get_record_location(baseid)
-                    break
-                except:
-                    print("table.merge (base section) spinning on page directory lock")
-                    raise Exception
-                    continue
+            base_record_location = self.get_record_location(baseid)
             base_logical_page = self._page_ranges[base_record_location.range][base_record_location.page]
             try:
                 current_base_record = base_logical_page.read(base_record_location.offset)[self.internal_id(0):]
@@ -650,14 +640,8 @@ class Table:
                 #reading at logical pages always return first serveral columns, metadata + userdefined columns
                 #so merged columns inserted will be directly detected.
             self.TPS[__range] = __tail__rid-Config.MAX_RECORDS_PER_PAGE+1
-            while True:
-                try:
-                    self._recreate_page_directory()
-                    break
-                except:
-                    print("table._page_directory_reallocation spinning on page directory lock")
-                    raise Exception
-                    continue
+            self._recreate_page_directory()
+
         if verbose: print('Table page directory reallocation says: I finished updating, you can go', process_time())
         #print(records)
         #self.lock = None
@@ -677,14 +661,8 @@ class Table:
         self._page_ranges[page_range].append(
             self._RID_allocator.make_tail_page(self._name, page_range, self._num_columns)
         )
-        while True:
-            try:
-                self._recreate_page_directory() # TODO does the page directory need to have a lock? I think so
-                break
-            except:
-                print("table._add_tail_page spinning on page directory lock")
-                raise Exception
-                continue
+        self._recreate_page_directory()
+
 
     """
     # There are 4096 RIDs that might be the base RID for the page this RID is
@@ -697,14 +675,20 @@ class Table:
     def get_record_location(self, RID: int):
         lowest_RID_that_might_be_the_base_for_this_RIDs_page = \
             RID - (Config.MAX_RECORDS_PER_PAGE - 1)
-        with self._page_directory_lock.acquire_S():
-            for i in range(lowest_RID_that_might_be_the_base_for_this_RIDs_page, RID + 1):
-                page_rng_and_page_index = self._page_directory.get(i)
-                if page_rng_and_page_index is not None:
-                    page_rng_index = page_rng_and_page_index[0]
-                    page_index = page_rng_and_page_index[1]
-                    offset = RID - i
-                    return RecordLocation(page_rng_index, page_index, offset)
+        while True:
+            try:
+                with self._page_directory_lock.acquire_S():
+                    for i in range(lowest_RID_that_might_be_the_base_for_this_RIDs_page, RID + 1):
+                        page_rng_and_page_index = self._page_directory.get(i)
+                        if page_rng_and_page_index is not None:
+                            page_rng_index = page_rng_and_page_index[0]
+                            page_index = page_rng_and_page_index[1]
+                            offset = RID - i
+                            return RecordLocation(page_rng_index, page_index, offset)
+                break
+            except:
+                if self.spin_messages: print("get_record_location spinning on SHARED page directory lock")
+                continue
 
         raise Exception("Record does not exist in this table")
 
@@ -716,13 +700,19 @@ class Table:
     """
     def _recreate_page_directory(self):
         # if a number is within <Records-in-page> of a record's rids, that's the page for it!
-        with self._page_directory_lock.acquire_X():
-            self._page_directory = {}
-            for i in range(len(self._page_ranges)):
-                page_rng = self._page_ranges[i]
-                for j in range(len(page_rng)):
-                    page = page_rng[j]
-                    self._page_directory[page.base_RID] = (i,j)
+        while True:
+            try:
+                with self._page_directory_lock.acquire_X():
+                    self._page_directory = {}
+                    for i in range(len(self._page_ranges)):
+                        page_rng = self._page_ranges[i]
+                        for j in range(len(page_rng)):
+                            page = page_rng[j]
+                            self._page_directory[page.base_RID] = (i,j)
+                break
+            except:
+                if self.spin_messages: print("_recreate_page_directory spinning on EXCLUSIVE page directory lock")
+                continue
 
     def delete_all_files_owned_in(self, path_to_db_files: str):
         PhysicalPageLocation.delete_table_files(path_to_db_files, self._name, len(self._page_ranges))
