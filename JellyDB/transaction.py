@@ -1,5 +1,5 @@
 from JellyDB.table import Table, Record
-from JellyDB.index import Index
+from JellyDB.indices import Indices
 
 class Transaction:
 
