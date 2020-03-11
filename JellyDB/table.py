@@ -73,9 +73,16 @@ class Table:
         # Attributes for merging
         self.current_tail_rid = 0
         self.current_base_rid = 0
+        # Ranges with full base pages (can be merged)
+        # Holds [page range number, last base RID]
         self.ranges_with_full_base = []
-        self.TPS = [None]
+        # Tail pages that are full (can be merged)
+        # Holds [page range number, page number within that range, last tail RID]
         self.merge_queue = collections.deque()
+
+        # List that holds TPS for each page range
+        # Index is page range number, value is TPS for that page range
+        self.TPS = [None]
 
         self._indices = Indices()
         self._indices.create_index(self.internal_id(self._key))
@@ -271,7 +278,7 @@ class Table:
         # Also, since a new page was created, add another value to TPS list
         if (self.current_base_rid % Config.TOTAL_RECORDS_FULL) == 0:
             if verbose: print("Table insert says: Base page full")
-            self.ranges_with_full_base.append([record_location.range,self.current_base_rid])
+            self.ranges_with_full_base.append([record_location.range, self.current_base_rid])
             self.TPS.append(None)
             if verbose: print("Table insert says: Here is self.ranges_with_full_base:", self.ranges_with_full_base)
 
@@ -457,48 +464,49 @@ class Table:
         # Track current tail rid
         self.current_tail_rid = tail_RID_of_current_update
 
+        # Write update to tail page
         try:
             self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update, current_update_loc.offset)
         except KeyError:
             raise KeyError("If you are reading this, bufferpool is throwing a KeyError at table.update!")
 
+        # Add tail page to merge queue if full
         if ((Config.START_TAIL_RID-self.current_tail_rid) % Config.MAX_RECORDS_PER_PAGE) == 0:
-            if verbose:
-                print(self.current_tail_rid)
             self.merge_queue.appendleft([current_update_loc.range, current_update_loc.page, self.current_tail_rid])
 
         # If there are tail pages to be merged
         if self.merge_queue:
-            if threading.activeCount() == 1:
-                for i in range(len(self.merge_queue)):
-                    found = False
-                    try:
-                        if verbose:
-                            print(self.merge_queue[-1])
-                            print(self.ranges_with_full_base[self.merge_queue[-1][0]][0])
+            # Do not spawn more than one merge thread
+            if threading.activeCount() > 1:
+                return
 
-                        #full base pages and one tail page are both full in the same page range
-                        if self.merge_queue[-1][0] == self.ranges_with_full_base[self.merge_queue[-1][0]][0]:
-                            found = True
-                            break
+            # Match tail page to be merged with base page & verify base page is full
+            for i in range(len(self.merge_queue)):
+                found = False
+                try:
+                    if verbose:
+                        print("Update says i = ", i)
+                        print("Update says self.merge_queue =", self.merge_queue)
+                        print("Update says self.ranges_with_full_base = ", self.ranges_with_full_base)
 
-                    except IndexError:
-                        self.merge_queue.appendleft(self.merge_queue.pop())
-                        continue
-                if found == True:
-                    merge_thread = threading.Thread(target = self.merge, args =(self.merge_queue.pop(),), name ='merge_thread')
-                    merge_thread.start()
-                else:
-                    pass
+                    # Check to see if last range in merge queue has an entry in ranges_with_full_base
+                    # self.merge_queue[-1][0] is page range number of last item in merge queue
+                    # self.ranges_with_full_base[self.merge_queue[-1][0]][0] is page range number in corresponding entry of ranges_with_full_base
+                    if self.merge_queue[-1][0] == self.ranges_with_full_base[self.merge_queue[-1][0]][0]:
+                        found = True
+                        break
 
-                if verbose:
-                    print("i'm still in main thread", threading.current_thread().name)
-            else:
-                #another thread was running
-                pass
-        else:
-            #empty
-            pass
+                # If tail page is full but base page is not, pop tail page and reinsert at beginning of queue.
+                # That way if base page gets full after more inserts happen, we remember the tail page can be merged.
+                except IndexError:
+                    self.merge_queue.appendleft(self.merge_queue.pop())
+                    continue
+
+            # Spawn merge thread
+            if found == True:
+                merge_thread = threading.Thread(target = self.merge, args =(self.merge_queue.pop(),), name ='merge_thread')
+                merge_thread.start()
+
 
     """
     # Convenience method to replace one value in an index with another
