@@ -87,6 +87,10 @@ class Table:
         self._indices = Indices()
         self._indices.create_index(self.internal_id(self._key))
 
+        # Single daemon merge thread that runs in the background
+        merge_thread = threading.Thread(target = self.merge_daemon, args=(), daemon=True, name ='merge_daemon')
+        merge_thread.start()
+
 
     """
     # The users of our database only know about their data columns. Since we
@@ -474,39 +478,6 @@ class Table:
         if ((Config.START_TAIL_RID-self.current_tail_rid) % Config.MAX_RECORDS_PER_PAGE) == 0:
             self.merge_queue.appendleft([current_update_loc.range, current_update_loc.page, self.current_tail_rid])
 
-        # If there are tail pages to be merged
-        if self.merge_queue:
-            # Do not spawn more than one merge thread
-            if threading.activeCount() > 1:
-                return
-
-            # Match tail page to be merged with base page & verify base page is full
-            for i in range(len(self.merge_queue)):
-                found = False
-                try:
-                    if verbose:
-                        print("Update says i = ", i)
-                        print("Update says self.merge_queue =", self.merge_queue)
-                        print("Update says self.ranges_with_full_base = ", self.ranges_with_full_base)
-
-                    # Check to see if last range in merge queue has an entry in ranges_with_full_base
-                    # self.merge_queue[-1][0] is page range number of last item in merge queue
-                    # self.ranges_with_full_base[self.merge_queue[-1][0]][0] is page range number in corresponding entry of ranges_with_full_base
-                    if self.merge_queue[-1][0] == self.ranges_with_full_base[self.merge_queue[-1][0]][0]:
-                        found = True
-                        break
-
-                # If tail page is full but base page is not, pop tail page and reinsert at beginning of queue.
-                # That way if base page gets full after more inserts happen, we remember the tail page can be merged.
-                except IndexError:
-                    self.merge_queue.appendleft(self.merge_queue.pop())
-                    continue
-
-            # Spawn merge thread
-            if found == True:
-                merge_thread = threading.Thread(target = self.merge, args =(self.merge_queue.pop(),), name ='merge_thread')
-                merge_thread.start()
-
 
     """
     # Convenience method to replace one value in an index with another
@@ -568,7 +539,51 @@ class Table:
 
         return sum(summation)
 
-    # Call merge function
+
+    """
+    # Background function that calls merge as needed.
+    # Continues looping until program exits.
+    """
+    def merge_daemon(self, verbose=False):
+        while True:
+            if len(self.merge_queue) == 0:
+                if verbose: print("Well, looks like the merge queue is empty.")
+                time.sleep(.01)
+                continue
+
+            # If there are tail pages to be merged
+            else:
+                # Match tail page to be merged with base page & verify base page is full
+                for i in range(len(self.merge_queue)):
+                    found = False
+                    try:
+                        # Check to see if last range in merge queue has an entry in ranges_with_full_base
+                        # self.merge_queue[-1][0] is page range number of last item in merge queue
+                        # self.ranges_with_full_base[self.merge_queue[-1][0]][0] is page range number in corresponding entry of ranges_with_full_base
+                        if self.merge_queue[-1][0] == self.ranges_with_full_base[self.merge_queue[-1][0]][0]:
+                            found = True
+                            break
+
+                    # If tail page is full but base page is not, pop tail page and reinsert at beginning of queue.
+                    # That way if base page gets full after more inserts happen, we remember the tail page can be merged.
+                    except IndexError:
+                        self.merge_queue.appendleft(self.merge_queue.pop())
+                        continue
+
+                # Call merge
+                if found == True:
+                    if verbose: print("Cool let me merge that for you!")
+                    self.merge(self.merge_queue.pop())
+
+                else:
+                    if verbose: print("I couldn't match any of these tail pages to a full base!")
+                    # This sleep call keeps the merge daemon from chugging CPU
+                    # when there's nothing available to merge and slowing down the main thread
+                    time.sleep(0.5)
+                    pass
+
+
+
     """
     :param tail_page_to_work_on: RecordLocation      # Location of last tail record in page range to merge
     """
