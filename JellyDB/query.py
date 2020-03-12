@@ -28,12 +28,12 @@ class Query:
     """
     # See table.py.
     """
-    def select(self, key: int, column,query_columns, transac_id, loc_ = None, commit = False, abort = False):
+    def select(self, key: int, column,query_columns, transac_id = None, loc_ = None, commit = False, abort = False):
         if abort:
             self.abort_in_table(loc)
         else:
             if commit == False:
-                r_ok = self.table.pre_select(key, column, query_columns, transac_id)
+                r_ok = self.table.pre_select(key, column, query_columns, transaction_id = transac_id)
                 if r_ok is not False:
                     return r_ok
                 else:
@@ -46,12 +46,12 @@ class Query:
     """
     # The * combines all arguments to the function after `key` into one tuple, columns.
     """
-    def update(self, key: int, *columns, transac_id,loc_ = None, commit = False, abort = False):
+    def update(self, key: int, *columns, transac_id_=None,loc_ = None, commit_ = False, abort = False):
         if abort:
             self.abort_in_table(loc_)
         else:
-            if commit == False:
-                u = self.table.pre_update(key, columns,transac_id)
+            if commit_ == False:
+                u = self.table.pre_update(key, columns,transaction_id = transac_id_)
                 if u is not False:
                     #u is location
                     #self.committed_update_record_location.append(u)
@@ -60,7 +60,7 @@ class Query:
                 else:
                     return False
             #output will be [(key,columns)], list of tuples
-            elif commit and (loc_ is not None):
+            elif commit_ and (loc_ is not None):
                 #index_of_offsets_going_tobe_committed = self.committed_update_record_location.index(loc)
                 self.table.update(key,columns, loc_)
                 #self.committed_update_record_location = None
@@ -77,7 +77,7 @@ class Query:
     def sum(self, start_range: int, end_range: int, aggregate_column_index: int):
         return self.table.sum(start_range, end_range, aggregate_column_index)
 
-    def increment(self, key, column, loc = None, commit = False, abort = False):
+    def increment(self, key, column, transac_id=None,loc = None, commit = False, abort = False):
         if abort:
             self.abort_in_table(loc)
         else:
@@ -93,7 +93,7 @@ class Query:
                 updated_columns[column] = record[column] + 1
                 #print('u',updated_columns,'r',record)
                 if commit == False:
-                    u_ = self.update(key, *updated_columns, commit)
+                    u_ = self.update(key, *updated_columns, transac_id_ = transac_id, commit_ = commit)
                     return u_
                 else:
                     #print('commit to update',loc,commit)

@@ -299,7 +299,7 @@ class Table:
     :param column:                  # Which column to look for that value (default to primary key column)
     :param query_columns: list      # List of integers, one per column. 1 means read the column, 0 means ignore (return None)
     """
-    def pre_select(self, keyword, *args, transaction_id, verbose = False):
+    def pre_select(self,keyword, column, query_columns, transaction_id = None, verbose = False):
         RIDs = self._indices.locate(self.internal_id(column), keyword)
         RID = RIDs[0]
         if RIDs is None:
@@ -321,7 +321,16 @@ class Table:
                 return target_loc
         else:#some one already read this record, no need to require lock again
             #should not require the shared lock again
-            return target_loc
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count >0:
+                return target_loc
+            else:
+                if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S_bool() == False:
+                    print('cannot assign share locks to record', keyword)
+                    return False
+                else:
+                    #print('I get urid',target_RIDs,threading.current_thread().name,key)
+                    self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
+                    return target_loc
 
 
 
@@ -398,7 +407,7 @@ class Table:
     :param key: int   # value in the primary key column of the record we are updating
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
-    def pre_update(self, key:int,columns: tuple, transaction_id):
+    def pre_update(self, key:int,columns: tuple, transaction_id = None):
         #uncommitted_record = Node(columns)
         #locate record in current base page
         target_RIDs = self._indices.locate(self.internal_id(self._key), key)
@@ -417,9 +426,11 @@ class Table:
                 self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X()
                 return target_loc
         else:
-            print("there's a read on this record before",key)
-            self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].upgrade()
-            return target_loc
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count == 1:
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].upgrade()
+                return target_loc
+            else:
+                return False
 
         '''
         current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)

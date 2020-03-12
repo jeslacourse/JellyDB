@@ -30,6 +30,7 @@ class Transaction:
             self.queries[self.transac_id] = [(query, args)]
         else:
             self.queries[self.transac_id].append((query, args))
+        #print(self.queries)
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
         #print(self.queries)
@@ -38,7 +39,7 @@ class Transaction:
             for tuple in value:
                 query = tuple[0]
                 args = tuple[1]
-                result = query(*args, key_)
+                result = query(*args, transac_id = key_)
                 # If the query has failed the transaction should abort
                 # writing queries returns record location
                 #print(self.committed_update_record_location, threading.current_thread().name)
@@ -63,7 +64,7 @@ class Transaction:
             for items in self.committed_update_record_location:
                 query(*args,loc = items, abort = True)
             self.committed_update_record_location.clear()
-        self.queries.clear()
+        del self.queries[self.transac_id]
         return False
 
     def commit(self):
@@ -75,7 +76,7 @@ class Transaction:
             for tuple in value:
                 query = tuple[0]
                 args = tuple[1]
-                result = query(*args, key_)
+                result = query(*args, transac_id = key_)
             #print(query.__name__)
                 if query.__name__ == 'increment'or'update':
                     query(*args, key,loc = self.committed_update_record_location[count], commit = True)
