@@ -76,6 +76,7 @@ class Table:
         self.merge_queue = collections.deque()
         self._indices = Indices()
         self._indices.create_index(self.internal_id(self._key))
+        self.current_transaction_id = []
 
     """
     # The users of our database only know about their data columns. Since we
@@ -298,7 +299,7 @@ class Table:
     :param column:                  # Which column to look for that value (default to primary key column)
     :param query_columns: list      # List of integers, one per column. 1 means read the column, 0 means ignore (return None)
     """
-    def pre_select(self, keyword, column, query_columns, verbose = False):
+    def pre_select(self, keyword, *args, transaction_id, verbose = False):
         RIDs = self._indices.locate(self.internal_id(column), keyword)
         RID = RIDs[0]
         if RIDs is None:
@@ -308,15 +309,22 @@ class Table:
             if verbose: print("Select function says: Indices.py returned empty list, returning None")
             return False
         target_loc = self.get_record_location(RID)
-
-        #lock dict structure:{[[{}]]}
-        if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S_bool() == False:
-            print('cannot assign share locks to record', keyword)
-            return False
-        else:
-            #print('I get urid',target_RIDs,threading.current_thread().name,key)
-            self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
+        if transaction_id not in self.current_transaction_id:# no readers read the same record before
+            self.current_transaction_id.append(transaction_id)
+            #lock dict structure:{[[{}]]}
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S_bool() == False:
+                print('cannot assign share locks to record', keyword)
+                return False
+            else:
+                #print('I get urid',target_RIDs,threading.current_thread().name,key)
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
+                return target_loc
+        else:#some one already read this record, no need to require lock again
+            #should not require the shared lock again
             return target_loc
+
+
+
 
     def select(self, keyword, column, query_columns, loc, verbose = False):
         if verbose:
@@ -361,7 +369,8 @@ class Table:
             # Get record from most updated logical page
             record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
-        self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].release()
+        if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count > 2:
+            self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].release()
         record = record_with_metadata[self.internal_id(0):]
         if verbose: print("Select function says: here's the record I found:", record)
 
@@ -389,7 +398,7 @@ class Table:
     :param key: int   # value in the primary key column of the record we are updating
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
-    def pre_update(self, key:int,columns: tuple):
+    def pre_update(self, key:int,columns: tuple, transaction_id):
         #uncommitted_record = Node(columns)
         #locate record in current base page
         target_RIDs = self._indices.locate(self.internal_id(self._key), key)
@@ -398,16 +407,20 @@ class Table:
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
         current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
         self.assert_not_deleted(current_indirection)
-        print(self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset], 'before release')
-        self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].release()
-        if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X_bool() == False:
-            print(self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count,'after release')
-            print('cannot assign exclusive lock to record', key)
-            return False
+        if transaction_id not in self.current_transaction_id:
+            print('a new transation started.....no reading on that record was done before')
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X_bool() == False:
+                print('cannot assign exclusive lock to record', key)
+                return False
+            else:
+                print('I successfully acquired exclusive lock')
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X()
+                return target_loc
         else:
-            print('I successfully acquired exclusive lock')
-            self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X()
+            print("there's a read on this record before",key)
+            self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].upgrade()
             return target_loc
+
         '''
         current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)
         if current_uRID != 0:
@@ -430,7 +443,6 @@ class Table:
         loc = self.get_record_location(target_RID)
         #target_base_RID = self.get_rid((loc.range,loc.page), loc.offset)
 
-        print(loc,target_loc)
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
 
         current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)

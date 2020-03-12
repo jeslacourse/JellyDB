@@ -11,7 +11,7 @@ class Query:
     """
     def __init__(self, table: Table):
         self.table: Table = table
-        self.assert_record_can_have_shared_lock = collections.deque()
+
 
     """
     # See table.py.
@@ -28,36 +28,30 @@ class Query:
     """
     # See table.py.
     """
-    def select(self, key: int, column,query_columns, loc_ = None, commit = False, abort = False):
+    def select(self, key: int, column,query_columns, transac_id, loc_ = None, commit = False, abort = False):
         if abort:
             self.abort_in_table(loc)
         else:
             if commit == False:
-                r_ok = self.table.pre_select(key, column, query_columns)
+                r_ok = self.table.pre_select(key, column, query_columns, transac_id)
                 if r_ok is not False:
-                    #u is location
-                    #self.committed_update_record_location.append(u)
-                    #print('check line 45',u)
                     return r_ok
                 else:
                     return False
-            #output will be [(key,columns)], list of tuples
             elif commit and (loc_ is not None):
-                #index_of_offsets_going_tobe_committed = self.committed_update_record_location.index(loc)
                 return self.table.select(key, column, query_columns, loc_)
-                #self.committed_update_record_location = None
             else:
                 print('something went wrong')
 
     """
     # The * combines all arguments to the function after `key` into one tuple, columns.
     """
-    def update(self, key: int, *columns, loc_ = None, commit = False, abort = False):
+    def update(self, key: int, *columns, transac_id,loc_ = None, commit = False, abort = False):
         if abort:
             self.abort_in_table(loc_)
         else:
             if commit == False:
-                u = self.table.pre_update(key, columns)
+                u = self.table.pre_update(key, columns,transac_id)
                 if u is not False:
                     #u is location
                     #self.committed_update_record_location.append(u)
