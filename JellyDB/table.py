@@ -313,19 +313,18 @@ class Table:
             self.current_transaction_id.append(transaction_id)
             #lock dict structure:{[[{}]]}
             if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S_bool() == False:
-                print('cannot assign share locks to record', keyword)
                 return False
             else:
                 #print('I get urid',target_RIDs,threading.current_thread().name,key)
                 self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
                 return target_loc
+
         else:#some one already read this record, no need to require lock again
             #should not require the shared lock again
             if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count >0:
                 return target_loc
             else:
                 if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S_bool() == False:
-                    print('cannot assign share locks to record', keyword)
                     return False
                 else:
                     #print('I get urid',target_RIDs,threading.current_thread().name,key)
@@ -417,12 +416,9 @@ class Table:
         current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
         self.assert_not_deleted(current_indirection)
         if transaction_id not in self.current_transaction_id:
-            print('a new transation started.....no reading on that record was done before')
             if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X_bool() == False:
-                print('cannot assign exclusive lock to record', key)
                 return False
             else:
-                print('I successfully acquired exclusive lock')
                 self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X()
                 return target_loc
         else:

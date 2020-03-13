@@ -28,12 +28,12 @@ class Query:
     """
     # See table.py.
     """
-    def select(self, key: int, column,query_columns, transac_id = None, loc_ = None, commit = False, abort = False):
+    def select(self, key: int, column,query_columns, transac_id_ = None, loc_ = None, commit = False, abort = False):
         if abort:
-            self.abort_in_table(loc)
+            self.abort_in_table(loc_)
         else:
             if commit == False:
-                r_ok = self.table.pre_select(key, column, query_columns, transaction_id = transac_id)
+                r_ok = self.table.pre_select(key, column, query_columns, transaction_id = transac_id_)
                 if r_ok is not False:
                     return r_ok
                 else:
@@ -81,7 +81,7 @@ class Query:
         if abort:
             self.abort_in_table(loc)
         else:
-            assert_if_record_can_be_read = self.select(key, self.table._key, [1] * self.table.num_columns)
+            assert_if_record_can_be_read = self.select(key, self.table._key, [1] * self.table.num_columns, transac_id_ = transac_id)
             if assert_if_record_can_be_read != False:
                 r = self.select(key, self.table._key, [1] * self.table.num_columns, loc_ = assert_if_record_can_be_read, commit = True)[0]
                 record = []
