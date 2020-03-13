@@ -12,8 +12,8 @@ class Transaction:
     """
     def __init__(self):
         self.queries = {}
-        self.committed_update_record_location = []
-        self.committed_select_record_location = []
+        self.committed_update_record_location = {}
+        self.committed_select_record_location = {}
         random_number = random.randint(0,16777215)
         hex_number = format(random_number,'x')
         #intialize random id for each transaction
@@ -38,11 +38,11 @@ class Transaction:
         for key_,value in self.queries.items():
             for tuple in value:
                 query = tuple[0]
-                args = tuple[1]
+                args_ = tuple[1]
                 if query.__name__ == 'select':
-                    result = query(*args, transac_id_ = key_)
+                    result = query(*args_, transac_id_ = key_,loc_ = None, commit=None, abort=None)
                 else:
-                    result = query(*args, transac_id = key_)
+                    result = query(*args_, transac_id = key_,loc = None, commit__=None, abort=None)
                 # If the query has failed the transaction should abort
                 # writing queries returns record location
                 #print(self.committed_update_record_location, threading.current_thread().name)
@@ -50,29 +50,37 @@ class Transaction:
                     return self.abort(query, args)
                 else:
                     if query.__name__ == 'select':
-                        self.committed_select_record_location.append(result)
+                        if self.transac_id not in self.committed_select_record_location.keys():
+                            self.committed_select_record_location[self.transac_id] = [result]
+                        else:
+                            self.committed_select_record_location[self.transac_id].append(result)
                     else:
                         #print('in transaction line 39',result)
-                        self.committed_update_record_location.append(result)
+                        if self.transac_id not in self.committed_update_record_location.keys():
+                            self.committed_update_record_location[self.transac_id] = [result]
+                        else:
+                            self.committed_update_record_location[self.transac_id].append(result)
+            return self.commit()
 
 
         #print('finished pre_check')
-        return self.commit()
 
     def abort(self,query,args):
         if query.__name__ == 'select':
             if (self.committed_select_record_location) != []:
                 for items in self.committed_select_record_location:
-                    query(*args,loc_ = items, abort = True)
-                self.committed_select_record_location.clear()
+                    query(*args,transac_id_ = None, loc_ = items, commit = None,abort = 1)
+                del self.committed_select_record_location[self.transac_id]
+                del self.queries[self.transac_id]
                 return False
             else:
                 return False
         else:
             if self.committed_update_record_location != []:
                 for items in self.committed_update_record_location:
-                    query(*args,loc = items, abort = True)
-                self.committed_update_record_location.clear()
+                    query(*args,transac_id = None,loc = items, commit__ = None, abort = 1)
+                del self.committed_update_record_location[self.transac_id]
+                del self.queries[self.transac_id]
                 return False
             else:
         #del self.queries[self.transac_id]
@@ -83,15 +91,19 @@ class Transaction:
         #print(index_for_query)
         #print(query.__name__, type(query.__name__))
         count = 0
+        #print(self.committed_select_record_location,'update',self.committed_update_record_location)
         for key_,value in self.queries.items():
             for tuple in value:
                 query = tuple[0]
-                args = tuple[1]
+                args_ = tuple[1]
                 if query.__name__ == 'select':
-                    query(*args,loc_ = self.committed_select_record_location[count], commit = True)
+                    query(*args_,transac_id_ =key_,loc_ = self.committed_update_record_location[self.transac_id][count//2], commit = 1, abort = None)
                 else:
-                    query(*args,loc = self.committed_update_record_location[count], commit = True)
-            count+=1
+                    print('ready to commit', query.__name__, args_)
+                    a = self.committed_update_record_location[self.transac_id][count//2]
+                    print(a)
+                    query(*args_,transac_id =key_, loc = a, commit__ = 1, abort = None)
+                count+=1
         return True
 
         #del self.queries[index_for_query]

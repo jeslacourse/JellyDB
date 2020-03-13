@@ -316,6 +316,7 @@ class Table:
                 return False
             else:
                 #print('I get urid',target_RIDs,threading.current_thread().name,key)
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count -= 1
                 self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
                 return target_loc
 
@@ -328,6 +329,7 @@ class Table:
                     return False
                 else:
                     #print('I get urid',target_RIDs,threading.current_thread().name,key)
+                    self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count -= 1
                     self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
                     return target_loc
 
@@ -419,6 +421,7 @@ class Table:
             if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X_bool() == False:
                 return False
             else:
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._exclusive_count -= 1
                 self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X()
                 return target_loc
         else:
