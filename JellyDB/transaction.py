@@ -40,9 +40,9 @@ class Transaction:
                 query = tuple[0]
                 args = tuple[1]
                 if query.__name__ == 'select':
-                    result = query(*args, transac_id_ = key,loc_ = None, commit=None, abort=None)
+                    result = query(*args, transac_id_ = key,loc_ = None)
                 else:
-                    result = query(*args, transac_id = key,loc = None, commit=None, abort=None)
+                    result = query(*args, transac_id = key,loc = None)
                 # If the query has failed the transaction should abort
                 # writing queries returns record location
                 #print(self.committed_update_record_location, threading.current_thread().name)
@@ -70,7 +70,7 @@ class Transaction:
             #print(self.committed_select_record_location)
             if transac in self.committed_select_record_location.keys():
                 for items in self.committed_select_record_location[transac]:
-                    query(*args,transac_id_ = None, loc_ = items, commit = None,abort = 1)
+                    query(*args,transac_id_ = None, loc_ = items, abort = True)
                 #print('abort status check',self.committed_select_record_location)
                 del self.committed_select_record_location[transac]
                 del self.committed_update_record_location[transac]
@@ -83,7 +83,7 @@ class Transaction:
                 #print(self.committed_update_record_location,'this is update')
 
                 for items in self.committed_update_record_location[transac]:
-                    query(*args,transac_id = None,loc = items, commit = None, abort = 1)
+                    query(*args,transac_id = None,loc = items, abort = True)
                 #print('abort status check', query.__name__,self.committed_select_record_location)
                 del self.committed_update_record_location[transac]
                 del self.committed_select_record_location[transac]
@@ -105,10 +105,10 @@ class Transaction:
                 args = tuple[1]
                 if query.__name__ == 'select':
                     #print('++++++++++++++++++ready to commit select', query.__name__, *args)
-                    result = query(*args,transac_id_ =None,loc_ = self.committed_select_record_location[self.transac_id][count//2], commit = 1, abort = None)
+                    result = query(*args,transac_id_ =key,loc_ = self.committed_select_record_location[self.transac_id][count//2], commit = True)
                 else:
                     #print('++++++++++++++++++++ready to commit increment',key, query.__name__, *args)
-                    result = query(*args,transac_id =key, loc = self.committed_update_record_location[self.transac_id][count//2], commit = 1, abort = None)
+                    result = query(*args,transac_id =key, loc = self.committed_update_record_location[self.transac_id][count//2], commit = True)
                     #print(result,'should have finished')
                 count+=1
         return True
