@@ -35,19 +35,19 @@ class Transaction:
     def run(self):
         #print(self.queries)
         #print(len(self.queries), threading.current_thread().name)
-        for key_,value in self.queries.items():
+        for key,value in self.queries.items():
             for tuple in value:
                 query = tuple[0]
-                args_ = tuple[1]
+                args = tuple[1]
                 if query.__name__ == 'select':
-                    result = query(*args_, transac_id_ = key_,loc_ = None, commit=None, abort=None)
+                    result = query(*args, transac_id_ = key,loc_ = None, commit=None, abort=None)
                 else:
-                    result = query(*args_, transac_id = key_,loc = None, commit__=None, abort=None)
+                    result = query(*args, transac_id = key,loc = None, commit=None, abort=None)
                 # If the query has failed the transaction should abort
                 # writing queries returns record location
                 #print(self.committed_update_record_location, threading.current_thread().name)
                 if result == False:
-                    return self.abort(query, args)
+                    return self.abort(query, *args, transac = key)
                 else:
                     if query.__name__ == 'select':
                         if self.transac_id not in self.committed_select_record_location.keys():
@@ -60,27 +60,34 @@ class Transaction:
                             self.committed_update_record_location[self.transac_id] = [result]
                         else:
                             self.committed_update_record_location[self.transac_id].append(result)
-            return self.commit()
+        return self.commit()
 
 
         #print('finished pre_check')
 
-    def abort(self,query,args):
+    def abort(self,query,*args,transac):
         if query.__name__ == 'select':
-            if (self.committed_select_record_location) != []:
-                for items in self.committed_select_record_location:
+            #print(self.committed_select_record_location)
+            if transac in self.committed_select_record_location.keys():
+                for items in self.committed_select_record_location[transac]:
                     query(*args,transac_id_ = None, loc_ = items, commit = None,abort = 1)
-                del self.committed_select_record_location[self.transac_id]
-                del self.queries[self.transac_id]
+                #print('abort status check',self.committed_select_record_location)
+                del self.committed_select_record_location[transac]
+                del self.committed_update_record_location[transac]
+                del self.queries[transac]
                 return False
             else:
                 return False
         else:
-            if self.committed_update_record_location != []:
-                for items in self.committed_update_record_location:
-                    query(*args,transac_id = None,loc = items, commit__ = None, abort = 1)
-                del self.committed_update_record_location[self.transac_id]
-                del self.queries[self.transac_id]
+            if transac in self.committed_update_record_location.keys():
+                #print(self.committed_update_record_location,'this is update')
+
+                for items in self.committed_update_record_location[transac]:
+                    query(*args,transac_id = None,loc = items, commit = None, abort = 1)
+                #print('abort status check', query.__name__,self.committed_select_record_location)
+                del self.committed_update_record_location[transac]
+                del self.committed_select_record_location[transac]
+                del self.queries[transac]
                 return False
             else:
         #del self.queries[self.transac_id]
@@ -92,17 +99,17 @@ class Transaction:
         #print(query.__name__, type(query.__name__))
         count = 0
         #print(self.committed_select_record_location,'update',self.committed_update_record_location)
-        for key_,value in self.queries.items():
+        for key,value in self.queries.items():
             for tuple in value:
-                query = tuple[0]
-                args_ = tuple[1]
+                query= tuple[0]
+                args = tuple[1]
                 if query.__name__ == 'select':
-                    query(*args_,transac_id_ =key_,loc_ = self.committed_update_record_location[self.transac_id][count//2], commit = 1, abort = None)
+                    #print('++++++++++++++++++ready to commit select', query.__name__, *args)
+                    result = query(*args,transac_id_ =None,loc_ = self.committed_select_record_location[self.transac_id][count//2], commit = 1, abort = None)
                 else:
-                    print('ready to commit', query.__name__, args_)
-                    a = self.committed_update_record_location[self.transac_id][count//2]
-                    print(a)
-                    query(*args_,transac_id =key_, loc = a, commit__ = 1, abort = None)
+                    #print('++++++++++++++++++++ready to commit increment',key, query.__name__, *args)
+                    result = query(*args,transac_id =key, loc = self.committed_update_record_location[self.transac_id][count//2], commit = 1, abort = None)
+                    #print(result,'should have finished')
                 count+=1
         return True
 

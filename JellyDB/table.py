@@ -77,6 +77,7 @@ class Table:
         self._indices = Indices()
         self._indices.create_index(self.internal_id(self._key))
         self.current_transaction_id = []
+        self.locations_tobe_summed = {}
 
     """
     # The users of our database only know about their data columns. Since we
@@ -299,7 +300,7 @@ class Table:
     :param column:                  # Which column to look for that value (default to primary key column)
     :param query_columns: list      # List of integers, one per column. 1 means read the column, 0 means ignore (return None)
     """
-    def pre_select(self,keyword, column, query_columns, transaction_id = None, verbose = False):
+    def pre_select(self,keyword, column, query_columns, select_in_same_transac_called = False, transaction_id = None,verbose = False):
         RIDs = self._indices.locate(self.internal_id(column), keyword)
         RID = RIDs[0]
         if RIDs is None:
@@ -322,13 +323,13 @@ class Table:
 
         else:#some one already read this record, no need to require lock again
             #should not require the shared lock again
-            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count >0:
+            if select_in_same_transac_called:
                 return target_loc
             else:
+                #the select within increment is called
                 if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S_bool() == False:
                     return False
                 else:
-                    #print('I get urid',target_RIDs,threading.current_thread().name,key)
                     self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count -= 1
                     self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
                     return target_loc
@@ -336,7 +337,7 @@ class Table:
 
 
 
-    def select(self, keyword, column, query_columns, loc, verbose = False):
+    def select(self, keyword, column, query_columns, loc, select_in_same_transac_called = False, verbose = False):
         if verbose:
             print("Select function says: attempting to locate keyword {} in column {}".format(keyword, column))
             print("Select function says: query_columns = ", query_columns)
@@ -379,8 +380,12 @@ class Table:
             # Get record from most updated logical page
             record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
-        if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count > 2:
-            self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].release()
+        if select_in_same_transac_called:
+            pass
+        else:
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count >0:
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count -= 1
+
         record = record_with_metadata[self.internal_id(0):]
         if verbose: print("Select function says: here's the record I found:", record)
 
@@ -425,6 +430,7 @@ class Table:
                 self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X()
                 return target_loc
         else:
+            #print('check share count',self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count)
             if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count == 1:
                 self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].upgrade()
                 return target_loc
@@ -520,8 +526,11 @@ class Table:
 
         self._page_ranges[current_update_loc.range][current_update_loc.page].write(current_update, current_update_loc.offset)
         #release write lock
-        print('release update lock')
-        self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].release()
+        #print('release update lock')
+        #resetting to release
+        #since we use counters
+        self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset] = XSLock()
+        self.locations_tobe_summed[key] = target_loc
         '''
         logical_page_of_target.update_uRID(target_loc.offset, 0)
         '''
@@ -620,7 +629,8 @@ class Table:
                 # Subscript 0 gets first item out
                 # And then .columns gets items out of Record object
                 # ONLY SUPPORTS SELECTING ON PRIMARY KEY
-                summation.append(self.select(ids, self._key, columns_for_sum)[0].columns[aggregate_column_index])
+
+                summation.append(self.select(ids, self._key, columns_for_sum,loc = self.locations_tobe_summed[ids], select_in_same_transac_called = True)[0].columns[aggregate_column_index])
             # Indices.py will throw KeyError if not all RIDs in range had actual records
             # Indices.py will return empty list for values that now have no associated RIDs after update or delete,
             #   resulting in select returning None and a NoneType error
@@ -628,7 +638,7 @@ class Table:
             except (KeyError, TypeError) as exc:
                 if verbose: print("Update says caught {}, skipping".format(type(exc).__name__))
                 continue
-
+        print(len(self.locations_tobe_summed.values()))
         return sum(summation)
 
     # Call merge function
@@ -805,7 +815,7 @@ class Table:
     def delete_all_files_owned_in(self, path_to_db_files: str):
         PhysicalPageLocation.delete_table_files(path_to_db_files, self._name, len(self._page_ranges))
 
-    def reset_uRID(self,record_location):
+    def reset(self,record_location):
         target_loc = record_location
         '''
         logical_page_of_target_to_abort = self._page_ranges[target_loc.range][target_loc.page]
