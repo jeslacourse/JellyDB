@@ -9,27 +9,18 @@ from JellyDB.page import Page
 # metadata... it just knows it holds several physical pages
 class LogicalPage:
     def __init__(self, table: str, __range: int, num_columns: int, base_RID: int, bound_RID: int, bufferpool: Bufferpool):
-        self.record_count = 0
         self.num_columns = num_columns
         self.base_RID = base_RID
         self.bound_RID = bound_RID
         self.tablename = table
         self.bufferpool_= bufferpool
+        self.capacity = self.bound_RID - self.base_RID + 1
+        self.record_count = 0
 
         # Create new array of Page objects, one per col
         self.pages = []
         for i in range(self.num_columns):
             self.pages.append(Page(table, __range, bufferpool))
-
-
-    def has_capacity(self):
-        return self.first_available_RID() != 0
-    
-    def first_available_RID(self):
-        next_RID = self.base_RID + self.record_count
-        if next_RID > self.bound_RID:
-            return 0
-        return next_RID
 
     """
     # Read one piece of data from one column in this page
@@ -50,23 +41,21 @@ class LogicalPage:
         return values
 
     """
-    # Append a record to this page (one value per column).
-    :param record: list  # a list containing one value (possibly `None`) for each column in this kind of page.
-    :returns: int        # RID of latest record
+    # Write a record somewhere in this page (one value per column).
+    :param index: int   # the offset to write to within this LogicalPage. Pages being "full" are managed at Table level
+    :param record: list # a list containing one value (possibly `None`) for each column in this kind of page.
     """
-    def write(self, record: list, verbose=False) -> int:
-        if not self.has_capacity():
-            print(str(self.base_RID) + " " + str(self.bound_RID) + " " + str(self.record_count))
-            raise Exception("You cannot write to a full page")
+    def write(self, record: list, index: int, verbose=False):
+        if index >= self.capacity:
+            print("self.base_RID", self.base_RID, "self.bound_RID", \
+            self.bound_RID, "index", str(index), "self.capacity", self.capacity)
+            raise Exception("Index out of bounds")
 
         # Loop through columns in record
         # Write each value to the corresponding page
         if verbose: print(str(self.base_RID) + " " + str(self.bound_RID))
         for i in range(len(record)):
-            self.pages[i].write(record[i], self.record_count)
-
-        self.record_count += 1
-        return self.base_RID + self.record_count
+            self.pages[i].write(record[i], index)
 
     def merge_write(self, pages_, columns, range__):
         '''this line decide whether to discard the old records, if want to keep old records
@@ -80,3 +69,17 @@ class LogicalPage:
     """
     def update_indirection_column(self, offset: int, value: int):
         self.pages[Config.INDIRECTION_COLUMN_INDEX].write(value, offset)
+    
+    """
+    :returns: int   # if all RIDs in this page have been given to records, this value is 0. Otherwise, it is the RID of the next available RID in this page.
+    """
+    def first_available_RID(self) -> int:
+        if not self.has_capacity():
+            return 0
+        return self.base_RID + self.record_count
+    
+    def has_capacity(self) -> bool:
+        return self.record_count < self.capacity 
+
+    def update_uRID(self, offset:int, boolcheck):
+        self.pages[Config.URID_INDEX].write(boolcheck, offset)

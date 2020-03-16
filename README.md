@@ -3,27 +3,20 @@ A database management module for Python inspired by [L-Store](https://www.resear
 
 ## Usage
 
-To run Milestone 2 testers (correctness test cases from instructors)
+To run Milestone 3 tester (correctness test cases from instructors):
 ```
 mkdir ~/ECS165
-python -m JellyDB.m2_tester_part1
-python -m JellyDB.m2_tester_part2
+python -m JellyDB.m3_tester
 ```
 
-To run Milestone 2 index tester (non-primary key select test cases from instructors)
+To run Milestone 3 transaction tester:
 ```
 rm ~/ECS165/*
-python -m JellyDB.index_tester
+python -m JellyDB.transaction_tester
 ```
 
-To run `test_on_correctness.py` (correctness test cases by JellyDB team):
-```
-python -m JellyDB.test_on_correctness
-```
-To run `performance_m2.py` (performance test cases by JellyDB team; loops to test a parameter 10 times, expect minimum 10 min to complete per round)
-```
-python performance_m2.py
-```
+For performance testing, we included an R notebook `performance_m3.Rmd`.
+
 
 ## Team
 - __Benjamin Rausch__: Systems architect
