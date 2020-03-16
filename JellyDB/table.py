@@ -614,7 +614,7 @@ class Table:
     def merge_daemon(self, verbose=False):
         while True:
             if self.daemon_stop:
-                print("Merge daemon says bye!")
+                if verbose: print("Merge daemon says bye!")
                 time.sleep(1)
                 continue
             if len(self.merge_queue) == 0:
