@@ -24,9 +24,7 @@ class Bufferpool:
     def _deallocate_members(self):
         self.data = None
         self.where_to_find_page_in_pool = None
-        self.lru_tracker = None
-        self.lock = None
-    
+
     """
     # Looks at how big the file is (i.e. how many pages have been stored there
     # already) and returns the number of pages already present. That number will

@@ -68,3 +68,12 @@ class XSLock:
                 self._exclusive_count = 0
             else:
                 raise Exception("There are no S or X locks to release")
+
+    def upgrade(self) -> XSLock:
+        with self._lock:
+            if self._share_count != 1 or self._exclusive_count != 0:
+                raise Exception("Cannot upgrade lock; there are {} sharers and {} exclusive holders of this lock".format(self._share_count, self._exclusive_count))
+                return False
+            self._share_count = 0
+            self._exclusive_count = 1
+            return self

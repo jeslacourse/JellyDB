@@ -65,6 +65,7 @@ class Table:
 
         # Initialize list of page ranges then create first range
         self._page_ranges = []
+        self.record_locks = {}
         self._add_page_range()
 
         # self._page_directory is a Dictionary of representative rid --> (page range, page no. within range)
@@ -91,6 +92,8 @@ class Table:
         merge_thread = threading.Thread(target = self.merge_daemon, args=(), daemon=True, name ='merge_daemon')
         merge_thread.start()
 
+        self.current_transaction_id = []
+        self.locations_tobe_summed = {}
 
     """
     # The users of our database only know about their data columns. Since we
@@ -245,8 +248,6 @@ class Table:
             if self._indices.has_index(i):
                 self._indices.delete(i, record_with_metadata[i], target_RID)
 
-        return True
-
 
     """
     # Insert a record with specified columns
@@ -260,13 +261,14 @@ class Table:
         # Prepend metadata to columns
         # Since this is a new base record, set indirection to 0
         # Base RID metadatacolumn will be 0
-        record_with_metadata = [0, time_ns(), 0, *columns]
+        record_with_metadata = [0, time_ns(), 0, 0, *columns]
 
         # Get next base rid, find what page it belongs to, and write the record to that page
         RID = self._allocate_first_available_base_RID()
         record_location = self.get_record_location(RID)
         self._page_ranges[record_location.range][record_location.page].write(record_with_metadata, record_location.offset)
-
+        #Initialize locks per offset
+        self.record_locks[record_location.range][record_location.page].append({record_location.offset:XSLock()})
         # Create entry for this record in index(es)
         for i in range(self.internal_id(0), self.internal_id(self._num_content_columns)):
             if self._indices.has_index(i):
@@ -286,7 +288,6 @@ class Table:
             self.TPS.append(None)
             if verbose: print("Table insert says: Here is self.ranges_with_full_base:", self.ranges_with_full_base)
 
-        return True
 
 
     def _allocate_first_available_base_RID(self):
@@ -305,13 +306,51 @@ class Table:
             raise Exception("Something went wrong; failed to allocate enough space")
 
 
+
     """
     # Read a record with specified key
     :param keyword: int             # What value to look for
     :param column:                  # Which column to look for that value (default to primary key column)
     :param query_columns: list      # List of integers, one per column. 1 means read the column, 0 means ignore (return None)
     """
-    def select(self, keyword, column, query_columns, verbose = False):
+    def pre_select(self,keyword, column, query_columns, select_in_same_transac_called = False, transaction_id = None,verbose = False):
+        RIDs = self._indices.locate(self.internal_id(column), keyword)
+        RID = RIDs[0]
+        if RIDs is None:
+            if verbose: print("Select function says: Indices.py returned None, returning None")
+            return False
+        if len(RIDs) == 0:
+            if verbose: print("Select function says: Indices.py returned empty list, returning None")
+            return False
+        target_loc = self.get_record_location(RID)
+        if transaction_id not in self.current_transaction_id:# no readers read the same record before
+            self.current_transaction_id.append(transaction_id)
+            #lock dict structure:{[[{}]]}
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S_bool() == False:
+                return False
+            else:
+                #print('I get urid',target_RIDs,threading.current_thread().name,key)
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count -= 1
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
+                return target_loc
+
+        else:#some one already read this record, no need to require lock again
+            #should not require the shared lock again
+            if select_in_same_transac_called:
+                return target_loc
+            else:
+                #the select within increment is called
+                if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S_bool() == False:
+                    return False
+                else:
+                    self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count -= 1
+                    self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_S()
+                    return target_loc
+
+
+
+
+    def select(self, keyword, column, query_columns, loc, select_in_same_transac_called = False, verbose = False):
         if verbose:
             print("Select function says: attempting to locate keyword {} in column {}".format(keyword, column))
             print("Select function says: query_columns = ", query_columns)
@@ -321,68 +360,58 @@ class Table:
 
         # Check index on column user requested
         # Get list of base RIDs for records with keyword in that column
-        RIDs = self._indices.locate(self.internal_id(column), keyword)
-
-        # Return None if no record exists for this key
-        if RIDs is None:
-            if verbose: print("Select function says: Indices.py returned None, returning None")
-            return None
-        if len(RIDs) == 0:
-            if verbose: print("Select function says: Indices.py returned empty list, returning None")
-            return None
-
-        if verbose: print("Select function says: I found {} records matching keyword {} in column {}".format(len(RIDs), keyword, column))
         results = []
+        target_loc = loc
+        # Find what logical page it lives on
+        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
 
-        for RID in RIDs:
-            # Get location of that base RID
-            target_loc = self.get_record_location(RID)
+        # Get the most updated logical page
+        # This will be a base page if no updates have happened yet
+        # Or will be a tail page if it has been updated
+        current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
+        self.assert_not_deleted(current_indirection)
 
-            # Find what logical page it lives on
-            logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
+        # Base page is already merged, no need to look at tail page
+        if self.TPS[target_loc.range] is not None \
+            and current_indirection > self.TPS[target_loc.range] \
+            and current_indirection <= Config.START_TAIL_RID:
+            record_with_metadata = logical_page_of_target.read(target_loc.offset)
 
-            # Get the most updated logical page
-            # This will be a base page if no updates have happened yet
-            # Or will be a tail page if it has been updated
-            current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
-            self.assert_not_deleted(current_indirection)
+        # Base page is not merged
+        else:
+            # Record has not been updated, no need to look at tail page
+            if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
+                latest_version_logical_page = logical_page_of_target
+                latest_version_offset = target_loc.offset
 
-            # Base page is already merged, no need to look at tail page
-            if self.TPS[target_loc.range] is not None \
-                and current_indirection > self.TPS[target_loc.range] \
-                and current_indirection <= Config.START_TAIL_RID:
-                record_with_metadata = logical_page_of_target.read(target_loc.offset)
-
-            # Base page is not merged
+            # Record has been updated, get location of tail record
             else:
-                # Record has not been updated, no need to look at tail page
-                if current_indirection == Config.INDIRECTION_COLUMN_VALUE_WHICH_MEANS_RECORD_HAS_NO_UPDATES_YET:
-                    latest_version_logical_page = logical_page_of_target
-                    latest_version_offset = target_loc.offset
+                tail_record_loc = self.get_record_location(current_indirection)
+                latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
+                latest_version_offset = tail_record_loc.offset
 
-                # Record has been updated, get location of tail record
-                else:
-                    tail_record_loc = self.get_record_location(current_indirection)
-                    latest_version_logical_page = self._page_ranges[tail_record_loc.range][tail_record_loc.page]
-                    latest_version_offset = tail_record_loc.offset
+            # Get record from most updated logical page
+            record_with_metadata = latest_version_logical_page.read(latest_version_offset)
 
-                # Get record from most updated logical page
-                record_with_metadata = latest_version_logical_page.read(latest_version_offset)
+        if select_in_same_transac_called:
+            pass
+        else:
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count >0:
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count -= 1
 
+        record = record_with_metadata[self.internal_id(0):]
+        if verbose: print("Select function says: here's the record I found:", record)
 
-            record = record_with_metadata[self.internal_id(0):]
-            if verbose: print("Select function says: here's the record I found:", record)
+        if len(not_asked_columns) > 0:
+            if verbose:
+                print("Select says not asked columns=", not_asked_columns)
+                print("Select says record=", record)
 
-            if len(not_asked_columns) > 0:
-                if verbose:
-                    print("Select says not asked columns=", not_asked_columns)
-                    print("Select says record=", record)
+            for m in not_asked_columns:
+                record[m] = None
 
-                for m in not_asked_columns:
-                    record[m] = None
-
-            fancy_record = Record(record)
-            results.append(fancy_record)
+        fancy_record = Record(record)
+        results.append(fancy_record)
 
         return results
 
@@ -397,18 +426,47 @@ class Table:
     :param key: int   # value in the primary key column of the record we are updating
     :param columns: tuple   # expect a tuple containing the values to put in each column: e.g. (1, 50, 3000, None, 300000)
     """
-    def update(self, key: int, columns: tuple, verbose=False):
-        #if verbose: print("Table says I'm updating at", process_time())
-
+    def pre_update(self, key:int,columns: tuple, transaction_id = None):
         # Get RID of record to update
         target_RIDs = self._indices.locate(self.internal_id(self._key), key)
         target_RID = target_RIDs[0]
-        # Get the base_rid for tail record metadata update
-        target_base_RID = target_RIDs[-1]
 
         # Find which logical page record lives on
         target_loc = self.get_record_location(target_RID)
         logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
+
+        # Get the most updated logical page
+        # This will be a base page if no updates have happened yet
+        # Or will be a tail page if it has been updated
+        current_indirection = logical_page_of_target.get(Config.INDIRECTION_COLUMN_INDEX, target_loc.offset)
+        self.assert_not_deleted(current_indirection)
+
+        # Acquire locks
+        if transaction_id not in self.current_transaction_id:
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X_bool() == False:
+                return False
+            else:
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._exclusive_count -= 1
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].acquire_X()
+                return target_loc
+        else:
+            #print('check share count',self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count)
+            if self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset]._share_count == 1:
+                self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset].upgrade()
+                return target_loc
+            else:
+                return False
+
+
+    def update(self, key,columns:tuple, target_location, verbose=False):
+        # Find which logical page record lives on
+        target_loc = target_location
+        target_RID = self.get_rid((target_loc.range,target_loc.page), target_loc.offset)
+        target_base_RID = target_RID
+        loc = self.get_record_location(target_RID)
+        logical_page_of_target = self._page_ranges[target_loc.range][target_loc.page]
+
+        current_uRID = logical_page_of_target.get(Config.URID_INDEX, target_loc.offset)
 
         # Get the most updated logical page
         # This will be a base page if no updates have happened yet
@@ -474,6 +532,13 @@ class Table:
         except KeyError:
             raise KeyError("If you are reading this, bufferpool is throwing a KeyError at table.update!")
 
+        #release write lock
+        #print('release update lock')
+        #resetting to release
+        #since we use counters
+        self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset] = XSLock()
+        self.locations_tobe_summed[key] = target_loc
+
         # Add tail page to merge queue if full
         if ((Config.START_TAIL_RID-self.current_tail_rid) % Config.MAX_RECORDS_PER_PAGE) == 0:
             self.merge_queue.appendleft([current_update_loc.range, current_update_loc.page, self.current_tail_rid])
@@ -528,7 +593,8 @@ class Table:
                 # Subscript 0 gets first item out
                 # And then .columns gets items out of Record object
                 # ONLY SUPPORTS SELECTING ON PRIMARY KEY
-                summation.append(self.select(ids, self._key, columns_for_sum)[0].columns[aggregate_column_index])
+
+                summation.append(self.select(ids, self._key, columns_for_sum,loc = self.locations_tobe_summed[ids], select_in_same_transac_called = True)[0].columns[aggregate_column_index])
             # Indices.py will throw KeyError if not all RIDs in range had actual records
             # Indices.py will return empty list for values that now have no associated RIDs after update or delete,
             #   resulting in select returning None and a NoneType error
@@ -666,7 +732,14 @@ class Table:
             )
             # keep track of the first tail RID in this new page range
             self._next_tail_RID_to_allocate.append(self._page_ranges[-1][-1].base_RID)
+
+        # Create subsets of locks per page range
+        # len(self._page_ranges) - 1 will represent the id of corresponding page range
+        # When a new page range is created, Initialize a place holder per base page
+        self.record_locks[len(self._page_ranges)-1] =[[] for _ in range(Config.NUMBER_OF_BASE_PAGES_IN_PAGE_RANGE)]
+
         self._recreate_page_directory()
+
 
     """
     :param page_range: int  # page range to add the tail page to.
@@ -730,3 +803,21 @@ class Table:
 
     def delete_all_files_owned_in(self, path_to_db_files: str):
         PhysicalPageLocation.delete_table_files(path_to_db_files, self._name, len(self._page_ranges))
+
+    def reset(self,record_location):
+        target_loc = record_location
+        '''
+        logical_page_of_target_to_abort = self._page_ranges[target_loc.range][target_loc.page]
+        logical_page_of_target_to_abort.update_uRID(target_loc.offset, 0)
+        '''
+        #delete all locks
+        self.record_locks[target_loc.range][target_loc.page][target_loc.offset][target_loc.offset] = XSLock()
+
+    def get_rid(self,pageidentity:tuple,offset):
+        listOfKeys = None
+        listOfItems = self._page_directory.items()
+        for item in listOfItems:
+            #print(item)
+            if item[1] == pageidentity:
+                listOfKeys = item[0]
+        return listOfKeys+offset
