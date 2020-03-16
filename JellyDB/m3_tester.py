@@ -1,9 +1,12 @@
+# JellyDB team has made some minor corrections on lines 9, 35, 49, and 55
+
 from JellyDB.db import Database
 from JellyDB.query import Query
 from JellyDB.transaction import Transaction
 from JellyDB.transaction_worker import TransactionWorker
 
 from random import choice, randint, sample, seed
+import threading
 
 db = Database()
 db.open('~/ECS165')
@@ -29,7 +32,7 @@ for i in range(num_threads):
     transaction_workers.append(TransactionWorker())
 
 for i in range(10000):
-    key = random.choice(keys)
+    key = choice(keys)
     record = records[key]
     c = record[1]
     transaction = Transaction()
@@ -43,13 +46,13 @@ for i in range(10000):
 
 threads = []
 for transaction_worker in transaction_workers:
-    threads.append(threading.Thread(transaction_worker.run, args = ()))
+    threads.append(threading.Thread(target = transaction_worker.run, args = ()))
 
 for thread in threads:
     thread.start()
 
 for thread in threads:
-    thread.wait()
+    thread.join()
 
 num_committed_transactions = sum(t.result for t in transaction_workers)
 
