@@ -1,0 +1,55 @@
+---
+title: "Milestone 3 Performance"
+output:
+  html_document: default
+date: "3/15/2020"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+
+performance_m3 <- read.table("performance_m3.txt",header = TRUE)
+```
+
+
+#### Multithread Speed Testing 
+
+Our milestone testing focused primarily on thread performance testing. In this case, we test performance on 1,2,4,8, and 16 threads on `transaction_tester.py`:
+
+
+```{r}
+# Thread Performance
+ggplot(data=performance_m3, aes(x = thread_num, y=time_takes_to_finish_threads)) +
+  geom_line() +
+  geom_point() + theme_bw() +
+  xlab("Number of Threads") + ylab("Time (seconds)") +
+  ggtitle("Multithread Performance")
+```
+
+
+As we increase the number of threads, our processing time increases, with a significant elbow between 8 and 16 threads. 
+
+
+#### Number of Threads Processed 
+
+
+```{r}
+
+# Thread Success
+ggplot(data=performance_m3, aes(x = thread_num, y=transaction_committed)) +
+  geom_line() +
+  geom_point() + theme_bw() +
+  xlab("Number of Threads") + ylab("Threads Committed") +
+  ggtitle("Multithread Success Rate")
+
+```
+
+
+As the number of threads increases, the number of successful transactions decreases. This relationship should be expected, as more threads will result in more conflicts as transactions attempt to access the same record(s). With that said, at 16 threads we still have a 99.1% success rate. 
+
+
+
+**Processor** Intel(R) Core(TM) i7-9750H CPU@ 2.60GHz 2.59
+
+**Installed Ram** 16.0 GB
