@@ -4,6 +4,7 @@ from JellyDB.bufferpool import Bufferpool
 from JellyDB.table import Table
 import pickle
 import os
+import time
 
 class DBDataBundle():
     def __init__(self, tables: dict, bufferpool, RID_allocator):
@@ -46,6 +47,15 @@ class Database():
             pickle.dump(to_pickle, db_file)
             self.path_to_db_files = None
             self.db_backup_filename = None
+        print("Db says bye!")
+
+    def daemon_slayer(self):
+
+        print("Database says I'm stopping the merge daemons")
+        for name in self.tables:
+            self.tables[name].daemon_stop = True
+        print("Database says sleeping for 2 seconds")
+        time.sleep(2)
 
     """
     # Creates a new table

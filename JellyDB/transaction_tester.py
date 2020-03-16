@@ -56,6 +56,8 @@ for i, thread in enumerate(threads):
 num_committed_transactions = sum(t.result for t in transaction_workers)
 print(num_committed_transactions, 'transaction committed.')
 
+db.daemon_slayer()
+print("transaction_tester says I'm calculating the sum")
 query = Query(grades_table)
 s = query.sum(keys[0], keys[-1], 1)
 

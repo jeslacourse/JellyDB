@@ -89,6 +89,7 @@ class Table:
         self._indices.create_index(self.internal_id(self._key))
 
         # Single daemon merge thread that runs in the background
+        self.daemon_stop = False
         merge_thread = threading.Thread(target = self.merge_daemon, args=(), daemon=True, name ='merge_daemon')
         merge_thread.start()
 
@@ -612,6 +613,10 @@ class Table:
     """
     def merge_daemon(self, verbose=False):
         while True:
+            if self.daemon_stop:
+                print("Merge daemon says bye!")
+                time.sleep(1)
+                continue
             if len(self.merge_queue) == 0:
                 if verbose: print("Well, looks like the merge queue is empty.")
                 time.sleep(.01)
