@@ -15,7 +15,7 @@ rm ~/ECS165/*
 python -m JellyDB.transaction_tester
 ```
 
-For performance testing, we included an R notebook `performance_m3.Rmd`.
+For performance testing, we included an R notebook `performance_m3.pdf`. The source code `performance_m3.Rmd` is also included.
 
 
 ## Team
