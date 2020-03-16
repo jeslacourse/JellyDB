@@ -39,7 +39,7 @@ class Transaction:
             for tuple in value:
                 query = tuple[0]
                 args = tuple[1]
-                if query.__name__ == 'select':
+                if query.__name__ == 'select' or query.__name__ == 'update':
                     result = query(*args, transac_id_ = key,loc_ = None)
                 else:
                     result = query(*args, transac_id = key,loc = None)
